@@ -43,18 +43,6 @@
   "scripts": {
     "hub:server": "node hub-server.mjs"
   },
-  "peerDependencies": {
-    "@oh-my-pi/pi-coding-agent": ">=0.60.0",
-    "@earendil-works/pi-coding-agent": ">=0.60.0"
-  },
-  "peerDependenciesMeta": {
-    "@oh-my-pi/pi-coding-agent": {
-      "optional": true
-    },
-    "@earendil-works/pi-coding-agent": {
-      "optional": true
-    }
-  },
   "license": "MIT",
   "repository": {
     "type": "git",
