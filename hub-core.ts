@@ -656,6 +656,8 @@ export function createHubExtension(api: any, params: HubParams) {
 	const toolNames = new Map<string, string>();
 	const pendingMobileInputs: PendingMobileInput[] = [];
 	let serverOk = false;
+	let consecutiveHttpFailures = 0;
+	const MAX_CONSECUTIVE_HTTP_FAILURES = 2;
 	let cachedSlashCommands: ReturnType<typeof slashCommandSummaries> | null = null;
 	let cachedAvailableModels: ReturnType<typeof availableModelSummaries> | null = null;
 
@@ -718,6 +720,18 @@ export function createHubExtension(api: any, params: HubParams) {
 		try { ctx.ui.setStatus(params.uiStatusKey, text); } catch {}
 	}
 
+	function markHttpSuccess(): void {
+		consecutiveHttpFailures = 0;
+	}
+
+	function markHttpFailure(): void {
+		consecutiveHttpFailures++;
+		if (consecutiveHttpFailures >= MAX_CONSECUTIVE_HTTP_FAILURES) {
+			serverOk = false;
+			setUiStatus("Hub ERR");
+		}
+	}
+
 	function currentStatus(): string {
 		const runningTool = toolNames.values().next().value;
 		return runningTool ? `tool:${runningTool}` : status;
@@ -734,9 +748,9 @@ export function createHubExtension(api: any, params: HubParams) {
 		if (!config.enabled || !sessionId || !serverOk) return;
 		try {
 			await post(config, "/api/event", { sessionId, event });
+			markHttpSuccess();
 		} catch {
-			serverOk = false;
-			setUiStatus("Hub ERR");
+			markHttpFailure();
 		}
 	}
 
@@ -865,6 +879,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 		try {
 			await ensureServer(config, params);
 			serverOk = true;
+			consecutiveHttpFailures = 0;
 			await register(ctx);
 			setUiStatus("Hub OK");
 		} catch {
@@ -893,8 +908,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 				...clientMetadata(params),
 			});
 		} catch {
-			serverOk = false;
-			setUiStatus("Hub ERR");
+			markHttpFailure();
 		} finally {
 			presenceInFlight = false;
 		}
@@ -905,6 +919,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 		try {
 			await ensureServer(config, params);
 			serverOk = true;
+			consecutiveHttpFailures = 0;
 			await post(config, "/api/register", { session: { ...currentSessionInfo(ctx, config, currentStatus(), params, sessionSlashCommands(), sessionAvailableModels(ctx)), startedAt }, ...clientMetadata(params) });
 			setUiStatus("Hub OK");
 			void pollCommands();
@@ -1010,9 +1025,9 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 					await sendCommandResult(command, false, error);
 				}
 			}
+			markHttpSuccess();
 		} catch {
-			serverOk = false;
-			setUiStatus("Hub ERR");
+			markHttpFailure();
 		} finally {
 			pollInFlight = false;
 		}
@@ -1129,7 +1144,8 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			try { await post(config, "/api/unregister", { sessionId }); } catch {}
 		}
 		serverOk = false;
-		setUiStatus("Hub ERR");
+		consecutiveHttpFailures = 0;
+		setUiStatus("Hub off");
 		if (presenceTimer) clearInterval(presenceTimer);
 		if (pollTimer) clearInterval(pollTimer);
 		if (monitorTimer) clearInterval(monitorTimer);
