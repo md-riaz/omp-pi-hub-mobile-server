@@ -417,6 +417,12 @@ String newClientCommandId() {
 class BrowseResult {
   final String path;
   final String parent;
+  final String root;
+  final String home;
+  final String platform;
+  final String separator;
+  final List<String> roots;
+  final bool showHidden;
   final List<BrowseEntry> items;
   final bool truncated;
   final int total;
@@ -425,6 +431,12 @@ class BrowseResult {
   BrowseResult({
     required this.path,
     required this.parent,
+    required this.root,
+    required this.home,
+    required this.platform,
+    required this.separator,
+    required this.roots,
+    required this.showHidden,
     required this.items,
     required this.truncated,
     required this.total,
@@ -433,8 +445,14 @@ class BrowseResult {
 
   factory BrowseResult.fromJson(Map<String, dynamic> json) {
     return BrowseResult(
-      path: json['path'] ?? '/',
-      parent: json['parent'] ?? '/',
+      path: json['path']?.toString() ?? '/',
+      parent: json['parent']?.toString() ?? '/',
+      root: json['root']?.toString() ?? '/',
+      home: json['home']?.toString() ?? '/',
+      platform: json['platform']?.toString() ?? '',
+      separator: json['separator']?.toString() ?? '/',
+      roots: _browseRootPaths(json['roots']),
+      showHidden: json['showHidden'] == true,
       items: (json['items'] as List? ?? [])
           .map((e) => BrowseEntry.fromJson(e))
           .toList(),
@@ -448,19 +466,53 @@ class BrowseResult {
 class BrowseEntry {
   final String name;
   final String path;
+  final String type;
   final bool isDirectory;
+  final bool isFile;
+  final bool isSymlink;
+  final String? targetType;
+  final String extension;
+  final int? size;
+  final int? modifiedAt;
+  final int? createdAt;
+  final bool? readable;
+  final bool? writable;
 
   BrowseEntry({
     required this.name,
     required this.path,
+    required this.type,
     required this.isDirectory,
+    required this.isFile,
+    required this.isSymlink,
+    required this.extension,
+    this.targetType,
+    this.size,
+    this.modifiedAt,
+    this.createdAt,
+    this.readable,
+    this.writable,
   });
 
   factory BrowseEntry.fromJson(Map<String, dynamic> json) {
+    final type = json['type']?.toString() ?? '';
+    final permissions = json['permissions'] is Map
+        ? _stringKeyMap(json['permissions'] as Map)
+        : const <String, dynamic>{};
     return BrowseEntry(
-      name: json['name'] ?? '',
-      path: json['path'] ?? '',
-      isDirectory: json['isDirectory'] ?? false,
+      name: json['name']?.toString() ?? '',
+      path: json['path']?.toString() ?? '',
+      type: type,
+      isDirectory: json['isDirectory'] == true || type == 'directory',
+      isFile: json['isFile'] == true || type == 'file',
+      isSymlink: json['isSymlink'] == true || type == 'symlink',
+      targetType: json['targetType']?.toString(),
+      extension: json['extension']?.toString() ?? '',
+      size: _intValue(json['size']),
+      modifiedAt: _intValue(json['modifiedAt']),
+      createdAt: _intValue(json['createdAt']),
+      readable: _boolValue(permissions['readable']),
+      writable: _boolValue(permissions['writable']),
     );
   }
 }
@@ -663,6 +715,27 @@ int _compareCommands(HubCommand a, HubCommand b) {
 
 Map<String, dynamic> _stringKeyMap(Map value) {
   return value.map((key, value) => MapEntry(key.toString(), value));
+}
+
+List<String> _browseRootPaths(Object? value) {
+  if (value is! List) return const [];
+  return [
+    for (final item in value)
+      if (item is Map && item['path'] != null)
+        item['path'].toString()
+      else if (item != null)
+        item.toString(),
+  ];
+}
+
+bool? _boolValue(Object? value) {
+  if (value is bool) return value;
+  if (value is String) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'true') return true;
+    if (normalized == 'false') return false;
+  }
+  return null;
 }
 
 int? _intValue(Object? value) {

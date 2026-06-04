@@ -100,25 +100,90 @@ function ensureConfig() {
 
 const config = ensureConfig();
 
-function isCommandAvailable(cmd) {
-  if (typeof cmd !== "string" || !cmd.trim()) return false;
-  const command = cmd.trim();
-  if (path.isAbsolute(command)) return fs.existsSync(command);
-  const pathDirs = String(process.env.PATH || "").split(path.delimiter).filter(Boolean);
-  const winExts = process.platform === "win32"
-    ? String(process.env.PATHEXT || ".EXE;.CMD;.BAT").split(";").filter(Boolean)
-    : [""];
-  const candidates = process.platform === "win32" && path.extname(command)
-    ? [command]
-    : winExts.map(ext => `${command}${ext.toLowerCase()}`).concat(winExts.map(ext => `${command}${ext.toUpperCase()}`));
-  for (const dir of pathDirs) {
-    for (const candidate of candidates) {
-      if (fs.existsSync(path.join(dir, candidate))) return true;
-    }
-  }
-  return false;
+function pathDirs() {
+  return String(process.env.PATH || "").split(path.delimiter).filter(Boolean);
 }
 
+function windowsPathExts() {
+  const rawExts = String(process.env.PATHEXT || ".COM;.EXE;.CMD;.BAT")
+    .split(";")
+    .map(ext => ext.trim())
+    .filter(Boolean);
+  return Array.from(new Set(["", ...rawExts, ...rawExts.map(ext => ext.toLowerCase())]));
+}
+
+function hasPathSeparator(command) {
+  return command.includes("/") || command.includes("\\");
+}
+
+function commandCandidates(command) {
+  const trimmed = String(command || "")
+    .trim()
+    .replace(/^["'](.+)["']$/, "$1");
+  if (!trimmed) return [];
+  const basePaths = path.isAbsolute(trimmed) || hasPathSeparator(trimmed)
+    ? [path.resolve(trimmed)]
+    : pathDirs().map(dir => path.join(dir, trimmed));
+  if (process.platform !== "win32") return basePaths;
+  return basePaths.flatMap(candidate => {
+    if (path.extname(candidate)) return [candidate];
+    return windowsPathExts().map(ext => `${candidate}${ext}`);
+  });
+}
+
+function canExecuteCommand(candidate) {
+  if (!fs.existsSync(candidate)) return false;
+  if (process.platform === "win32") return true;
+  try {
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveCommandPath(cmd) {
+  for (const candidate of commandCandidates(cmd)) {
+    if (canExecuteCommand(candidate)) return candidate;
+  }
+  return null;
+}
+
+function isCommandAvailable(cmd) {
+  return Boolean(resolveCommandPath(cmd));
+}
+
+function isWindowsCommandScript(commandPath) {
+  if (process.platform !== "win32") return false;
+  return [".bat", ".cmd"].includes(path.extname(commandPath).toLowerCase());
+}
+
+function quoteCmdArg(value) {
+  const normalized = String(value ?? "").replace(/\r?\n/g, " ");
+  if (!normalized) return '""';
+  return `"${normalized.replace(/(["^&|<>()%!])/g, "^$1")}"`;
+}
+
+function spawnAgentProcess(cliCommand, args, request, env) {
+  const commandPath = resolveCommandPath(cliCommand);
+  if (!commandPath) throw new Error(`configured command not found: ${cliCommand}`);
+  const common = {
+    cwd: request.cwd,
+    env,
+    shell: false,
+    windowsHide: true,
+    detached: !config.agentCreation.testMode,
+    stdio: config.agentCreation.testMode ? ["ignore", "pipe", "pipe"] : "ignore",
+  };
+  if (isWindowsCommandScript(commandPath)) {
+    const commandLine = ["call", quoteCmdArg(commandPath), ...args.map(quoteCmdArg)].join(" ");
+    return spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", commandLine], {
+      ...common,
+      windowsVerbatimArguments: true,
+    });
+  }
+  return spawn(commandPath, args, common);
+}
 let _cliCache = { at: 0, list: [] };
 
 function detectAvailableClis() {
@@ -128,6 +193,80 @@ function detectAvailableClis() {
     .map(([cli]) => cli);
   _cliCache = { at: Date.now(), list };
   return list;
+}
+
+function queryFlag(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+function safeAccess(filePath, mode) {
+  try {
+    fs.accessSync(filePath, mode);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function timestampMs(value) {
+  return Number.isFinite(value) ? Math.trunc(value) : null;
+}
+
+function statKind(stat) {
+  if (!stat) return null;
+  if (stat.isDirectory()) return "directory";
+  if (stat.isFile()) return "file";
+  if (stat.isSymbolicLink()) return "symlink";
+  return "other";
+}
+
+function browseRoots(dirPath) {
+  const roots = new Map();
+  const addRoot = value => {
+    if (typeof value !== "string" || !value.trim()) return;
+    const root = value.endsWith(path.sep) ? value : `${value}${path.sep}`;
+    roots.set(process.platform === "win32" ? root.toLowerCase() : root, root);
+  };
+  addRoot(path.parse(dirPath).root);
+  addRoot(path.parse(os.homedir()).root);
+  addRoot(path.parse(process.cwd()).root);
+  if (process.platform === "win32") {
+    if (process.env.SystemDrive) addRoot(process.env.SystemDrive);
+    if (process.env.HOMEDRIVE) addRoot(process.env.HOMEDRIVE);
+  } else {
+    addRoot("/");
+  }
+  return Array.from(roots.values()).map(root => ({ name: root, path: root }));
+}
+
+function browseEntry(dirPath, entry) {
+  const itemPath = path.join(dirPath, entry.name);
+  let lstat = null;
+  let stat = null;
+  try { lstat = fs.lstatSync(itemPath); } catch {}
+  try { stat = entry.isSymbolicLink() ? fs.statSync(itemPath) : lstat; } catch {}
+  const isSymlink = entry.isSymbolicLink();
+  const targetType = isSymlink ? statKind(stat) : null;
+  const type = isSymlink ? "symlink" : statKind(stat) || "other";
+  const isDirectory = Boolean(stat?.isDirectory());
+  const isFile = Boolean(stat?.isFile());
+  return {
+    name: entry.name,
+    path: itemPath,
+    type,
+    isDirectory,
+    isFile,
+    isSymlink,
+    targetType,
+    extension: isDirectory ? "" : path.extname(entry.name),
+    size: stat && !isDirectory ? stat.size : null,
+    modifiedAt: timestampMs(stat?.mtimeMs ?? lstat?.mtimeMs),
+    createdAt: timestampMs(stat?.birthtimeMs ?? lstat?.birthtimeMs),
+    permissions: {
+      readable: safeAccess(itemPath, fs.constants.R_OK),
+      writable: safeAccess(itemPath, fs.constants.W_OK),
+    },
+  };
 }
 
 const sessions = new Map();
@@ -1033,23 +1172,7 @@ function startAgentCreation(request) {
     PI_HUB_INITIAL_PROMPT: request.initialPrompt,
   };
   const args = agentCreationArgs(request);
-  const child = process.platform === "win32" && !config.agentCreation.testMode
-    ? spawn("cmd.exe", ["/c", "start", "Hub Dashboard Agent", cliCommand, ...args], {
-        cwd: request.cwd,
-        env,
-        shell: false,
-        windowsHide: false,
-        detached: true,
-        stdio: "ignore",
-      })
-    : spawn(cliCommand, args, {
-        cwd: request.cwd,
-        env,
-        shell: false,
-        windowsHide: false,
-        detached: !config.agentCreation.testMode,
-        stdio: config.agentCreation.testMode ? ["ignore", "pipe", "pipe"] : "ignore",
-      });
+  const child = spawnAgentProcess(cliCommand, args, request, env);
   creation.pid = child.pid || null;
   creation.status = config.agentCreation.testMode ? "running" : "spawned";
   broadcastAgentCreation(creation);
@@ -1350,6 +1473,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && (url.pathname === "/api/browse" || url.pathname === "/api/v2/browse")) {
       const rawPath = url.searchParams.get("path") || "";
       const dirPath = path.resolve(rawPath || os.homedir());
+      const showHidden = queryFlag(url.searchParams.get("showHidden"));
       try {
         const stat = fs.statSync(dirPath);
         if (!stat.isDirectory()) throw new Error("not a directory");
@@ -1359,19 +1483,31 @@ const server = http.createServer(async (req, res) => {
       }
       const limit = 500;
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      const visibleEntries = entries.filter(e => !e.name.startsWith("."));
+      const visibleEntries = showHidden ? entries : entries.filter(e => !e.name.startsWith("."));
       const items = visibleEntries
         .sort((a, b) => {
-          if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+          const aDir = a.isDirectory();
+          const bDir = b.isDirectory();
+          if (aDir !== bDir) return aDir ? -1 : 1;
           return a.name.localeCompare(b.name);
         })
         .slice(0, limit)
-        .map(e => ({
-          name: e.name,
-          path: path.join(dirPath, e.name),
-          isDirectory: e.isDirectory(),
-        }));
-      sendJson(req, res, 200, { ok: true, path: dirPath, parent: path.dirname(dirPath), items, truncated: visibleEntries.length > limit, total: visibleEntries.length, limit });
+        .map(e => browseEntry(dirPath, e));
+      sendJson(req, res, 200, {
+        ok: true,
+        path: dirPath,
+        parent: path.dirname(dirPath),
+        root: path.parse(dirPath).root,
+        home: os.homedir(),
+        platform: process.platform,
+        separator: path.sep,
+        roots: browseRoots(dirPath),
+        showHidden,
+        items,
+        truncated: visibleEntries.length > limit,
+        total: visibleEntries.length,
+        limit,
+      });
       return;
     }
 

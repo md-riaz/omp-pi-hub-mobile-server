@@ -149,7 +149,7 @@ Server resolves `cwd`, requires it to be an existing directory on the hub host, 
 
 `GET /api/browse?path=/home/user/projects` returns directory listing for the host machine. Requires `browse` capability.
 
-Request query params: `?path=<absolute-path>` defaults to the hub host home directory when omitted.
+Request query params: `?path=<absolute-path>` defaults to the hub host home directory when omitted. Dot-prefixed entries are hidden by default; pass `showHidden=true` to include them.
 
 Response:
 
@@ -158,14 +158,23 @@ Response:
   "ok": true,
   "path": "/home/user/projects",
   "parent": "/home/user",
+  "root": "/",
+  "home": "/home/user",
+  "platform": "linux",
+  "separator": "/",
+  "roots": [{ "name": "/", "path": "/" }],
+  "showHidden": false,
   "items": [
-    { "name": "project-a", "type": "directory", "size": null, "modifiedAt": 1770000000000 },
-    { "name": "README.md", "type": "file", "size": 1024, "modifiedAt": 1770000000000 }
-  ]
+    { "name": "project-a", "path": "/home/user/projects/project-a", "type": "directory", "isDirectory": true, "isFile": false, "isSymlink": false, "targetType": null, "extension": "", "size": null, "modifiedAt": 1770000000000, "createdAt": 1769990000000, "permissions": { "readable": true, "writable": true } },
+    { "name": "README.md", "path": "/home/user/projects/README.md", "type": "file", "isDirectory": false, "isFile": true, "isSymlink": false, "targetType": null, "extension": ".md", "size": 1024, "modifiedAt": 1770000000000, "createdAt": 1769990000000, "permissions": { "readable": true, "writable": true } }
+  ],
+  "truncated": false,
+  "total": 2,
+  "limit": 500
 }
 ```
 
-Server resolves the requested path and rejects invalid or non-directory paths.
+Server resolves the requested path and rejects invalid or non-directory paths. `roots` gives mobile clients stable root targets across Windows, Linux, and macOS; symlinks keep `type: "symlink"` and expose the resolved `targetType` when available.
 
 ## Send Attachment
 

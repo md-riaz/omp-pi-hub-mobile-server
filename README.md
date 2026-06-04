@@ -171,7 +171,7 @@ Key fields:
 - `port`: hub server port. Defaults to `18000`.
 - `token`: bearer token required by the app and API.
 - `autoStartServer`: lets either extension wrapper start the shared server automatically.
-- `agentCreation.commands`: maps CLI ids (`omp`, `pi`) to binaries or absolute paths.
+- `agentCreation.commands`: maps CLI ids (`omp`, `pi`) to binaries or absolute paths. Commands are resolved through `PATH`; Windows `.cmd`/`.bat` shims are supported.
 - `agentCreation.defaultCli`: used when old apps omit `cli`.
 - `agentCreation.testMode`: runs spawned commands in foreground test mode.
 
@@ -218,7 +218,7 @@ All API routes except `/` require `Authorization: Bearer <token>`. Query-string 
 - `POST /api/control` - queue `abort`, `compact`, `set_model`, or `shutdown`.
 - `GET /api/poll` - session command polling endpoint.
 - `POST /api/agents/create` - guarded agent creation.
-- `GET /api/browse` and `GET /api/v2/browse` - list remote directories.
+- `GET /api/browse` and `GET /api/v2/browse` - list remote directories with root, platform, symlink, size, timestamp, and permission metadata.
 - `POST /api/send-attachment` and `POST /api/v2/send-attachment` - send files as attachments.
 
 ## Security Notes

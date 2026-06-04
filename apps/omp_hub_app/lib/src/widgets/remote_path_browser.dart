@@ -38,6 +38,9 @@ class RemotePathBrowser extends StatefulWidget {
 
 class _RemotePathBrowserState extends State<RemotePathBrowser> {
   late String _current;
+  String _parent = '/';
+  String _root = '/';
+  String _home = '/';
   List<BrowseEntry> _entries = [];
   bool _loading = true;
   String? _error;
@@ -63,6 +66,9 @@ class _RemotePathBrowserState extends State<RemotePathBrowser> {
       if (!mounted) return;
       setState(() {
         _current = result.path;
+        _parent = result.parent;
+        _root = result.root;
+        _home = result.home;
         _entries = result.items;
         _loading = false;
       });
@@ -142,22 +148,21 @@ class _RemotePathBrowserState extends State<RemotePathBrowser> {
                       icon: Icons.home,
                       label: 'Home',
                       onTap: () =>
-                          widget.canBrowse ? _loadDirectory('/') : null,
+                          widget.canBrowse ? _loadDirectory(_home) : null,
                     ),
-                    if (_current != '/') ...[
+                    const SizedBox(width: 8),
+                    _NavBtn(
+                      icon: Icons.storage_outlined,
+                      label: 'Root',
+                      onTap: () =>
+                          widget.canBrowse ? _loadDirectory(_root) : null,
+                    ),
+                    if (_current != _parent) ...[
                       const SizedBox(width: 8),
                       _NavBtn(
                         label: 'Up',
-                        onTap: () => widget.canBrowse
-                            ? _loadDirectory(
-                                _entries.isNotEmpty
-                                    ? _entries.first.path.substring(
-                                        0,
-                                        _entries.first.path.lastIndexOf('/'),
-                                      )
-                                    : '/',
-                              )
-                            : null,
+                        onTap: () =>
+                            widget.canBrowse ? _loadDirectory(_parent) : null,
                       ),
                     ],
                   ],
