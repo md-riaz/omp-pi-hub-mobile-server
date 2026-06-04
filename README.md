@@ -1,8 +1,8 @@
-# Hub Dashboard
+# omp-pi-hub-mobile-server
 
 **Version: 2.1.0**
 
-Hub Dashboard is a local-first mission-control server and Android app for both Oh-My-Pi (`omp`) and Pi (`pi`) Coding Agent sessions. One shared extension core, one HTTP/SSE server, one token, and one Flutter app show sessions from both CLIs together.
+`omp-pi-hub-mobile-server` is a local-first mission-control server and Android app for both Oh-My-Pi (`omp`) and Pi (`pi`) Coding Agent sessions. One shared extension core, one HTTP/SSE server, one token, and one Flutter app show sessions from both CLIs together.
 
 > Status: early but usable. The hub is designed for trusted private networks and should not be exposed directly to the public internet.
 
@@ -29,7 +29,7 @@ omp sessions                  pi sessions
        token-protected JSON + SSE
                   |
                   v
-        apps/omp_hub_app (Hub Mobile)
+        apps/omp_hub_app (OMP Pi Hub Mobile)
 ```
 
 Compatibility shims remain:

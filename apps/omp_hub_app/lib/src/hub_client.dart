@@ -48,9 +48,9 @@ class AgentCreateResult {
   final String? error;
 
   String get summary {
-    final idPart = id == null ? '' : ' Â· $id';
-    final pidPart = pid == null ? '' : ' Â· pid $pid';
-    final errorPart = error == null ? '' : ' Â· $error';
+    final idPart = id == null ? '' : ' - $id';
+    final pidPart = pid == null ? '' : ' - pid $pid';
+    final errorPart = error == null ? '' : ' - $error';
     return '$status$idPart$pidPart$errorPart';
   }
 

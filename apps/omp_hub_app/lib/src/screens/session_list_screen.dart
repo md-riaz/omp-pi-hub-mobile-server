@@ -121,7 +121,9 @@ class _SessionListScreenState extends State<SessionListScreen> {
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
               decoration: BoxDecoration(
                 color: HubTheme.panel.withValues(alpha: 0.82),
-                border: const Border(bottom: BorderSide(color: HubTheme.softLine)),
+                border: const Border(
+                  bottom: BorderSide(color: HubTheme.softLine),
+                ),
               ),
               child: Column(
                 children: [
@@ -147,7 +149,7 @@ class _SessionListScreenState extends State<SessionListScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Hub Mobile',
+                              'OMP Pi Hub Mobile',
                               style: TextStyle(
                                 color: HubTheme.text,
                                 fontSize: 18,
@@ -233,9 +235,13 @@ class _SessionListScreenState extends State<SessionListScreen> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: selected ? HubTheme.accentSoft : HubTheme.card,
+                              color: selected
+                                  ? HubTheme.accentSoft
+                                  : HubTheme.card,
                               border: Border.all(
-                                color: selected ? HubTheme.accent : HubTheme.softLine,
+                                color: selected
+                                    ? HubTheme.accent
+                                    : HubTheme.softLine,
                               ),
                               borderRadius: BorderRadius.circular(999),
                             ),
@@ -279,7 +285,10 @@ class _SessionListScreenState extends State<SessionListScreen> {
                               ),
                             ),
                             const SizedBox(height: 14),
-                            const Text('No conversations found', style: HubTheme.headingM),
+                            const Text(
+                              'No conversations found',
+                              style: HubTheme.headingM,
+                            ),
                             const SizedBox(height: 6),
                             Text(
                               'Try a different search or start a new conversation.',
@@ -311,7 +320,10 @@ class _SessionListScreenState extends State<SessionListScreen> {
             icon: const Icon(Icons.add, color: Colors.white),
             label: const Text(
               'New session',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -322,7 +334,10 @@ class _SessionListScreenState extends State<SessionListScreen> {
             icon: const Icon(Icons.send, color: HubTheme.accent),
             label: const Text(
               'Batch send',
-              style: TextStyle(color: HubTheme.accent, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: HubTheme.accent,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -426,7 +441,11 @@ class _SessionCard extends StatelessWidget {
                 border: Border.all(color: HubTheme.softLine),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(Icons.chat_outlined, size: 18, color: HubTheme.accent),
+              child: const Icon(
+                Icons.chat_outlined,
+                size: 18,
+                color: HubTheme.accent,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -486,7 +505,7 @@ class _SessionCard extends StatelessWidget {
                   if (session.health?.attentionReasons.isNotEmpty == true) ...[
                     const SizedBox(height: 8),
                     Text(
-                      session.health!.attentionReasons.join(' · '),
+                      session.health!.attentionReasons.join(' - '),
                       style: const TextStyle(color: HubTheme.red, fontSize: 11),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

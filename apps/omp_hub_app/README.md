@@ -1,6 +1,6 @@
-# OMP Hub Android App
+# OMP Pi Hub Mobile App
 
-Flutter Android client for OMP Hub mission control (v2.0.45+45).
+Flutter Android client for `omp-pi-hub-mobile-server` v2.1.0. It connects to the shared hub server and controls both `omp` and `pi` sessions.
 
 ## Run from source
 
@@ -12,16 +12,8 @@ flutter run
 
 ## Build APK
 
-Release build:
-
 ```bash
 flutter build apk --release
-```
-
-Debug build for local testing:
-
-```bash
-flutter build apk --debug
 ```
 
 APK outputs are written under:
@@ -32,7 +24,7 @@ build/app/outputs/flutter-apk/
 
 ## Connect
 
-Start the hub from an OMP session first:
+Start the shared hub from either CLI first:
 
 ```text
 /hub start
@@ -42,26 +34,17 @@ Then enter the hub URL and token in the app. The app adds `http://` automaticall
 
 Common URLs:
 
-- Android emulator: `http://10.0.2.2:18878`
-- Physical phone on LAN: `http://<hub-host-lan-ip>:18878`
-- Tailscale: `http://<hub-host-tailscale-ip>:18878`
+- Android emulator: `http://10.0.2.2:18000`
+- Physical phone on LAN: `http://<hub-host-lan-ip>:18000`
+- VPN or other routed network: `http://<hub-host-ip>:18000`
 
 Token file on the hub host:
 
 ```text
-~/.omp/agent/omp-hub/config.json
+~/.hub-dashboard/server/config.json
 ```
 
-For physical phone access, the hub binds `0.0.0.0` by default. Keep it on trusted LAN/VPN/Tailscale paths and allow inbound TCP `18878` through the host firewall if needed.
-
-## Use
-
-1. Tap **Connect**.
-2. Select a session.
-3. Review chat-style conversation history with collapsible tool, terminal, and edit groups.
-4. Send prompts, attach files, paste from clipboard, or run server file browse.
-5. Run controls: abort, compact, switch model, or shutdown for the selected session.
-6. Create new OMP sessions from any existing directory on the hub host.
+The app shows a CLI picker on New Session only when the server reports both `omp` and `pi` in `availableClis`.
 
 ## Test
 

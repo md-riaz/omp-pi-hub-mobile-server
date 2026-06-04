@@ -1,7 +1,7 @@
-name: omp_hub_app
-description: "Hub Mobile Companion for monitoring and controlling OMP sessions over any network."
+name: omp_pi_hub_mobile_server
+description: "OMP Pi Hub Mobile client for monitoring and controlling OMP and Pi sessions over any network."
 publish_to: 'none'
-version: 2.0.45+45
+version: 2.1.0+46
 
 environment:
   sdk: ^3.11.1

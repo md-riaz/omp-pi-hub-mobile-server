@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "app.omphub.companion"
+    namespace = "app.omppihub.mobile.server"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.omphub.companion"
+        applicationId = "app.omppihub.mobile.server"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

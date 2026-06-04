@@ -14,16 +14,16 @@ import 'src/widgets/new_session_sheet.dart';
 import 'src/widgets/broadcast_sheet.dart';
 
 void main() {
-  runApp(const PiHubApp());
+  runApp(const OmpPiHubMobileServerApp());
 }
 
-class PiHubApp extends StatelessWidget {
-  const PiHubApp({super.key});
+class OmpPiHubMobileServerApp extends StatelessWidget {
+  const OmpPiHubMobileServerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Hub Mobile',
+      title: 'OMP Pi Hub Mobile',
       debugShowCheckedModeBanner: false,
       theme: HubTheme.themeData,
       home: const HubHomePage(),
@@ -89,7 +89,7 @@ class _PendingUserMessage {
       timestamp: createdAt,
       text: text,
       metadata: {
-        'commandStatus': failed ? 'send failed Â· kept locally' : 'sending...',
+        'commandStatus': failed ? 'send failed - kept locally' : 'sending...',
         'localPending': true,
         'clientCommandId': id,
         if (commandId != null) 'commandId': commandId,
@@ -433,7 +433,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       return 'Server not running or wrong address. Run /hub start then /hub info to get the correct URL.';
     }
     if (lower.contains('timed out') || lower.contains('timeout')) {
-      return 'Could not reach the server.\n\nâ€¢ Check the URL matches /hub info output\nâ€¢ Ensure port 18878 is open in Windows Firewall\nâ€¢ Phone and host must be on the same network';
+      return 'Could not reach the server.\n\n- Check the URL matches /hub info output\n- Ensure port 18000 is open in Windows Firewall\n- Phone and host must be on the same network';
     }
     if (lower.contains('cleartext')) {
       return 'Android blocks HTTP. Use the latest APK from GitHub Releases.';
@@ -441,7 +441,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
     if (lower.contains('socketexception') ||
         lower.contains('network is unreachable') ||
         lower.contains('failed host lookup')) {
-      return 'Network unreachable.\n\nâ€¢ Use the LAN IP from /hub info (not localhost)\nâ€¢ Phone and host must share a network\nâ€¢ Check firewall allows inbound TCP 18878';
+      return 'Network unreachable.\n\n- Use the LAN IP from /hub info (not localhost)\n- Phone and host must share a network\n- Check firewall allows inbound TCP 18000';
     }
     if (lower.contains('connection reset') || lower.contains('broken pipe')) {
       return 'Connection dropped. The server may have restarted. Tap Connect to retry.';

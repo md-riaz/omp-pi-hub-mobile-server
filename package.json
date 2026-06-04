@@ -1,5 +1,5 @@
 {
-  "name": "pi-omp-hub-dashboard",
+  "name": "omp-pi-hub-mobile-server",
   "version": "2.1.0",
   "description": "Extension and Flutter app for monitoring and controlling Pi and Oh-My-Pi agent sessions from a phone over any network.",
   "keywords": [

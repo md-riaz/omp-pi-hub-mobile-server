@@ -73,7 +73,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Hub Mobile', style: HubTheme.headingL),
+              const Text('OMP Pi Hub Mobile', style: HubTheme.headingL),
               const SizedBox(height: 8),
               Text(
                 'Connect to your hub server and continue conversations from your phone.',
@@ -121,11 +121,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                           ),
                         )
                       else
-                        const Icon(
-                          Icons.wifi,
-                          size: 17,
-                          color: Colors.white,
-                        ),
+                        const Icon(Icons.wifi, size: 17, color: Colors.white),
                       const SizedBox(width: 8),
                       Text(
                         widget.connecting ? 'Connecting...' : 'Connect',
