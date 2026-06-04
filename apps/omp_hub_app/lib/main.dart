@@ -14,16 +14,16 @@ import 'src/widgets/new_session_sheet.dart';
 import 'src/widgets/broadcast_sheet.dart';
 
 void main() {
-  runApp(const OmpPiHubMobileServerApp());
+  runApp(const OmpPiHubMobileCompanionApp());
 }
 
-class OmpPiHubMobileServerApp extends StatelessWidget {
-  const OmpPiHubMobileServerApp({super.key});
+class OmpPiHubMobileCompanionApp extends StatelessWidget {
+  const OmpPiHubMobileCompanionApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OMP Pi Hub Mobile',
+      title: 'OMP Pi Hub Mobile Companion',
       debugShowCheckedModeBanner: false,
       theme: HubTheme.themeData,
       home: const HubHomePage(),

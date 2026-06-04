@@ -29,7 +29,7 @@ omp sessions                  pi sessions
        token-protected JSON + SSE
                   |
                   v
-        apps/omp_hub_app (OMP Pi Hub Mobile)
+        apps/omp_hub_app (OMP Pi Hub Mobile Companion)
 ```
 
 Compatibility shims remain:

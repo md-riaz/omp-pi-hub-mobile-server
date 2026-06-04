@@ -1,4 +1,4 @@
-package app.omppihub.mobile.server
+package app.omppihub.mobile.companion
 
 import io.flutter.embedding.android.FlutterActivity
 
