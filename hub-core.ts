@@ -163,36 +163,9 @@ function readPid(): number | null {
 	}
 }
 
-function getWindowsLauncherPath(): string {
-	return join(hubDir(), "server-launch.vbs");
-}
-
-function quoteWindowsArg(value: string): string {
-	return `"${value.replace(/"/g, '""')}"`;
-}
-
 function spawnServer(config: HubConfig): ChildProcess {
 	mkdirSync(hubDir(), { recursive: true });
 	const script = getServerScript();
-	if (process.platform === "win32") {
-		const commandLine = [quoteWindowsArg(process.execPath), quoteWindowsArg(script)].join(" ");
-		const launcher = getWindowsLauncherPath();
-		writeFileSync(
-			launcher,
-			[
-				'Set WshShell = CreateObject("WScript.Shell")',
-				`WshShell.Run "${commandLine.replace(/"/g, '""')}", 0, False`,
-				'Set WshShell = Nothing',
-				"",
-			].join("\r\n"),
-		);
-		return spawn("wscript.exe", [launcher], {
-			detached: true,
-			stdio: "ignore",
-			windowsHide: true,
-			env: { ...process.env, HUB_DASHBOARD_DIR: hubHome() },
-		});
-	}
 	return spawn(process.execPath, [script], {
 		detached: true,
 		stdio: "ignore",
