@@ -551,7 +551,7 @@ function firewallHint(config: HubConfig, params: HubParams): string {
 	if (process.platform === "darwin") {
 		return [
 			"macOS Firewall:",
-			"System Settings â†’ Network â†’ Firewall â†’ Optionsâ€¦",
+			"System Settings -> Network -> Firewall -> Options...",
 			`Allow incoming connections for: ${process.execPath}`,
 			"",
 			"Manual pf example:",
@@ -591,7 +591,7 @@ async function hubStatusText(config: HubConfig, connected: boolean, params: HubP
 		`Server process: ${processRunning ? "running" : "not running"}`,
 		...(healthError ? [`Health error: ${healthError}`] : []),
 		`Auto-start: ${config.autoStartServer ? "enabled" : "disabled"}`,
-		`Manual stop: ${isServerManuallyStopped() ? "yes â€” run /hub start to clear" : "no"}`,
+		`Manual stop: ${isServerManuallyStopped() ? "yes - run /hub start to clear" : "no"}`,
 		`Bind: ${config.host}:${config.port}`,
 	].join("\n");
 }
@@ -704,7 +704,7 @@ export function createHubExtension(api: any, params: HubParams) {
 			await post(config, "/api/event", { sessionId, event });
 		} catch {
 			serverOk = false;
-			setUiStatus("Hub âœ—");
+			setUiStatus("Hub ERR");
 		}
 	}
 
@@ -834,10 +834,10 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			await ensureServer(config, params);
 			serverOk = true;
 			await register(ctx);
-			setUiStatus("Hub âœ“");
+			setUiStatus("Hub OK");
 		} catch {
 			serverOk = false;
-			setUiStatus("Hub âœ—");
+			setUiStatus("Hub ERR");
 		} finally {
 			monitorInFlight = false;
 		}
@@ -862,7 +862,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			});
 		} catch {
 			serverOk = false;
-			setUiStatus("Hub âœ—");
+			setUiStatus("Hub ERR");
 		} finally {
 			presenceInFlight = false;
 		}
@@ -874,11 +874,11 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			await ensureServer(config, params);
 			serverOk = true;
 			await post(config, "/api/register", { session: { ...currentSessionInfo(ctx, config, currentStatus(), params, sessionSlashCommands(), sessionAvailableModels(ctx)), startedAt }, ...clientMetadata(params) });
-			setUiStatus("Hub âœ“");
+			setUiStatus("Hub OK");
 			void pollCommands();
 		} catch (error) {
 			serverOk = false;
-			setUiStatus("Hub âœ—");
+			setUiStatus("Hub ERR");
 			if (ctx.hasUI) {
 				ctx.ui.notify(`${params.displayName} unavailable: ${error instanceof Error ? error.message : String(error)}`, "warning");
 			}
@@ -980,7 +980,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			}
 		} catch {
 			serverOk = false;
-			setUiStatus("Hub âœ—");
+			setUiStatus("Hub ERR");
 		} finally {
 			pollInFlight = false;
 		}
@@ -1097,7 +1097,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			try { await post(config, "/api/unregister", { sessionId }); } catch {}
 		}
 		serverOk = false;
-		setUiStatus("Hub âœ—");
+		setUiStatus("Hub ERR");
 		if (presenceTimer) clearInterval(presenceTimer);
 		if (pollTimer) clearInterval(pollTimer);
 		if (monitorTimer) clearInterval(monitorTimer);

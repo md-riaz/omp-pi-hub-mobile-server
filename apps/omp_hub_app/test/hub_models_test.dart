@@ -13,6 +13,7 @@ void main() {
     expect(snapshot.server?.schemaVersion, 2);
     expect(snapshot.server?.capabilities.health, isTrue);
     expect(snapshot.server?.capabilities.agentCreation, isFalse);
+    expect(snapshot.server?.availableClis, ['omp', 'pi']);
     expect(snapshot.sessions, hasLength(20));
     expect(
       snapshot.sessions.map((session) => session.health?.state).toSet(),

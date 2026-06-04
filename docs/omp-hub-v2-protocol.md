@@ -1,6 +1,6 @@
-# OMP Hub v2 protocol notes
+# OMP/Pi Hub v2 Protocol Notes
 
-OMP Hub v2 is additive. OMP Hub uses canonical `/api/...` routes while mobile mission-control surfaces use versioned events and richer snapshot fields.
+The v2 protocol is additive. The unified hub uses canonical `/api/...` routes while mobile mission-control surfaces use event envelopes and richer snapshot fields.
 
 ## Compatibility
 
@@ -8,8 +8,9 @@ OMP Hub v2 is additive. OMP Hub uses canonical `/api/...` routes while mobile mi
 - Canonical routes keep their response shape: `/api/register`, `/api/presence`, `/api/event`, `/api/stream`, `/api/snapshot`, `/api/send`, `/api/control`, `/api/poll`.
 - New fields are optional for older clients. Unknown fields should be ignored.
 - Server normalizes v1 payloads into internal v2 events before applying state changes.
+- `GET /api/browse` and `POST /api/send-attachment` have `/api/v2/...` aliases for compatibility.
 
-## Event envelope
+## Event Envelope
 
 ```json
 {
@@ -41,7 +42,7 @@ Fields:
 | `attention` | optional | Whether event should create/raise operator attention. |
 | `payload` | optional | Event-specific body. |
 
-## Snapshot shape
+## Snapshot Shape
 
 `GET /api/snapshot` keeps the v1 `server` and `sessions` shape. v2 adds optional mission-control fields under existing objects.
 
@@ -51,11 +52,15 @@ Fields:
     "pid": 1234,
     "startedAt": 1770000000000,
     "host": "0.0.0.0",
-    "port": 18878,
+    "port": 18000,
     "time": "2026-02-03T04:05:06.000Z",
-    "version": "2.0.45",
+    "version": "2.1.0",
     "schemaVersion": 2,
+    "availableClis": ["omp", "pi"],
+    "staleThresholdMs": 120000,
+    "commandTimeoutMs": 300000,
     "capabilities": {
+      "schemaVersion": 2,
       "health": true,
       "eventEnvelope": true,
       "commandLifecycle": true,
@@ -65,7 +70,8 @@ Fields:
       "collaboration": true
     }
   },
-  "sessions": []
+  "sessions": [],
+  "commands": []
 }
 ```
 
@@ -92,11 +98,12 @@ Health states:
 - `offline`: explicit unregister or online flag false.
 - `stale`: last presence older than server `staleThresholdMs`.
 - `error`: recent tool error, command failure, or agent error event.
+- `blocked`: pending approval/diff-style attention.
 - `active`: running tool, thinking, or streaming message.
 - `idle`: online without attention.
 - `unknown`: insufficient data.
 
-## Command
+## Commands
 
 Commands are queued by mobile/operator routes and delivered by `/api/poll`.
 
@@ -118,12 +125,13 @@ Statuses: `queued`, `delivered`, `applied`, `failed`, `expired`, `cancelled`.
 
 Current v1 command payloads keep `id`, `type`, `text`, `modelId`, and `timestamp` for extension compatibility.
 
-## Agent creation
+## Agent Creation
 
-Agent creation is always advertised as capable. Mobile submits a bounded request:
+Agent creation is advertised through `capabilities.agentCreation`. Mobile submits a bounded request to `POST /api/agents/create`:
 
 ```json
 {
+  "cli": "pi",
   "cwd": "/home/alice/projects/project-a",
   "name": "project-a-reviewer",
   "model": "gpt-5-codex",
@@ -131,13 +139,17 @@ Agent creation is always advertised as capable. Mobile submits a bounded request
 }
 ```
 
-Server resolves `cwd`, requires it to be an existing directory on the hub host, and spawns the configured OMP command without shell interpolation. Server must reject arbitrary command strings.
+Server resolves `cwd`, requires it to be an existing directory on the hub host, validates `cli` against `config.agentCreation.commands`, and spawns the configured command without shell interpolation. Server must reject arbitrary command strings. If `cli` is omitted, the server uses `config.agentCreation.defaultCli`.
 
-## Browse remote directories
+## CLI Availability
+
+`/api/health` and `snapshot().server` include `availableClis`, derived by checking configured command binaries in `config.agentCreation.commands`. The mobile app uses this list to show a CLI picker only when more than one CLI is available.
+
+## Browse Remote Directories
 
 `GET /api/browse?path=/home/user/projects` returns directory listing for the host machine. Requires `browse` capability.
 
-Request query params: `?path=<absolute-path>` (defaults to the hub host home directory when omitted).
+Request query params: `?path=<absolute-path>` defaults to the hub host home directory when omitted.
 
 Response:
 
@@ -155,7 +167,7 @@ Response:
 
 Server resolves the requested path and rejects invalid or non-directory paths.
 
-## Send attachment
+## Send Attachment
 
 `POST /api/send-attachment` sends files as attachments to a session. Requires `attachments` capability.
 
@@ -173,9 +185,9 @@ Request body:
 
 Limits: max 5 attachments, images up to 5 MB each, text files up to 100k chars. Only inline images and text/code files are supported; arbitrary binaries are rejected.
 
-Server validates size and type, then queues a command with attachments. Extension converts to OMP `TextContent | ImageContent` array via `omp.sendUserMessage`.
+Server validates size and type, then queues a command with attachments. Extension converts to content arrays via the active CLI runtime API.
 
-## Representative event types
+## Representative Event Types
 
 | Type | Payload summary |
 | --- | --- |

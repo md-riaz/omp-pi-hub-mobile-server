@@ -1,125 +1,87 @@
-# AGENTS.md — AI Agent Onboarding Guide
+# AGENTS.md - AI Agent Onboarding Guide
 
-This repository is intended to be easy for future AI coding agents to scan quickly. Start here before editing.
+This repo is the unified `omp-pi-hub-mobile-server` project. Read this before editing.
 
 ## Project Purpose
 
-OMP Hub is a local-first mobile mission-control surface for Oh My Pi Coding Agent sessions. It has three parts:
+`omp-pi-hub-mobile-server` is a local-first mobile mission-control surface for both Oh-My-Pi (`omp`) and Pi (`pi`) Coding Agent sessions.
 
-1. `omp-hub.ts` — OMP extension loaded into each OMP session.
-2. `omp-hub-server.mjs` — local HTTP/SSE hub server shared by sessions.
-3. `apps/omp_hub_app` — Flutter Android app for monitoring/control from phone.
+It has three runtime pieces:
 
-Primary user goal: monitor and control many OMP sessions from Android without RDP, with fast LAN/VPN access and minimal setup.
+1. `hub-core.ts` plus wrappers `omp-hub.ts` and `pi-hub.ts`.
+2. `hub-server.mjs`, with `omp-hub-server.mjs` and `pi-hub-server.mjs` as compatibility shims.
+3. `apps/omp_hub_app`, the OMP Pi Hub Mobile Companion Flutter Android app.
 
-## Current User Preferences / Product Direction
+Primary user goal: monitor and control many OMP and Pi sessions from Android without RDP, with one URL, one token, and one combined session list.
 
-- App must **not require Tailscale**. It should work over any network route that reaches the hub host.
-- Direct phone access requires host firewall/provider firewall to allow TCP `18878`; port choice does not remove firewall requirement.
-- App should remember URL + token and auto-connect.
-- App should show only connected/current sessions. Hub should not retain stale disconnected sessions in memory.
-- Agent detail should feel like OMP TUI/terminal, not a cluttered mobile card dashboard.
-- Tools/commands/tool outputs should be collapsible so chat history stays readable.
-- `/hub stop` disconnects current session only; `/hub server stop` kills hub for all sessions.
-- `/hub info` already shows token; no separate `/hub token` command.
+## Current Product Direction
+
+- App must not require Tailscale. Any LAN, VPN, tunnel, or routed network path can work.
+- Direct phone access requires host/provider firewall to allow TCP `18000`.
+- Shared config and bearer token live at `~/.hub-dashboard/server/config.json`.
+- App remembers URL and token and auto-connects.
+- App shows only connected/current sessions; hub should not retain stale disconnected sessions in memory.
+- New Session uses server `availableClis`: show a CLI picker only when multiple configured CLI binaries are available.
+- `/hub stop` disconnects current session only; `/hub server stop` kills the shared server.
+- `/hub info` shows token; do not reintroduce `/hub token`.
 
 ## Current Feature State
 
 Implemented:
 
-- OMP extension auto-start/register/presence/event streaming/command polling.
-- Hub server memory-only state, token auth, HTTP JSON API, SSE stream.
-- Android app with connection persistence + auto-connect.
-- Mobile controls: prompt, abort, compact, model switch, shutdown.
-- File attachment sending (pick files, images, clipboard paste).
-- Server browse endpoint for remote directory listing.
-- Chat-style session detail with tool groups, terminal cards, edit cards, waiting cards.
-- Agent creation surfaces.
+- Shared extension implementation with CLI-specific wrapper params.
+- Shared hub server, default `0.0.0.0:18000`, memory-only state, bearer auth, JSON API, and SSE stream.
+- Dual CLI registration from `omp` and `pi` sessions into the same server.
+- Server CLI availability detection and guarded agent creation for configured CLI ids.
+- Android companion app with connection persistence, auto-connect, mission-control list, session detail, prompt/control sending, file attachments, browse, and New Session CLI selection.
 - Stale session pruning from hub memory.
-- Terminal-style agent detail inner screen.
-- Release APKs published via GitHub releases.
+- Terminal-style agent detail view with collapsible tools/commands/output.
 
 Not implemented / paused:
 
-- HTTPS/stronger auth before public internet exposure.
+- HTTPS, token rotation, rate limiting, or stronger auth for public exposure.
 - Optional cloud relay mode.
 
 ## Key Files
 
-### Root
+Root:
 
-- `README.md` — user-facing setup/use/troubleshooting.
-- `docs/omp-hub-v2-protocol.md` — API/protocol notes.
-- `.sdd/omp-hub-v2-mobile-first-agent-mission-control/` — original design/spec/proposal artifacts.
+- `README.md` - user setup/use/troubleshooting.
+- `package.json` - package manifest for both `omp` and `pi` extension loaders.
+- `docs/omp-hub-v2-protocol.md` - API/protocol notes.
+- `docs/ai-context.md` - short AI context reference.
 
-### Extension
+Extension:
 
-- `omp-hub.ts`
-  - Loads config from `~/.omp/agent/omp-hub/config.json`.
-  - Auto-starts server unless `autoStartServer=false`.
-  - Registers session at `/api/register`.
-  - Sends presence/events.
-  - Polls `/api/poll` and applies commands.
-  - Registers `/hub` command family.
+- `hub-core.ts` - shared extension logic, config loading, auto-start, session register/presence/event streaming, command polling, and `/hub` command family.
+- `omp-hub.ts` - OMP wrapper using `@oh-my-pi/pi-coding-agent`, client id `omp-hub-extension`, CLI `omp`.
+- `pi-hub.ts` - Pi wrapper using `@earendil-works/pi-coding-agent`, client id `pi-hub-extension`, CLI `pi`.
 
-Important command behavior:
+Server:
 
-- `/hub` / `/hub info` / `/hub status`: show status, app URLs, token, firewall hint.
-- `/hub start`: start/reconnect this session.
-- `/hub stop`: unregister/disconnect this session only.
-- `/hub server stop`: kill hub server process; all sessions disconnect.
-- `/hub firewall`: print exact Windows firewall command.
+- `hub-server.mjs` - shared Node HTTP/SSE server, default `0.0.0.0:18000`.
+- `omp-hub-server.mjs` and `pi-hub-server.mjs` - import shims for back compatibility.
+- `snapshot()` - returns server info, sessions, commands, and `availableClis`.
+- `removeSessionState()` - deletes session, command queues, commands, and broadcasts removal.
+- `validateAgentCreationRequest()` / `startAgentCreation()` - validate CLI id/cwd and spawn configured command with `shell: false`.
 
-### Server
+Flutter Android app:
 
-- `omp-hub-server.mjs`
-  - Node HTTP server on `config.host`/`config.port`, default `0.0.0.0:18878`.
-  - Bearer token or `?token=` auth.
-  - In-memory Maps: `sessions`, `commands`, `commandQueues`, push devices, audit events.
-  - `snapshot()` prunes stale sessions before returning data.
-  - `/api/unregister` removes session state and broadcasts `session_removed`.
-
-Important functions:
-
-- `snapshot()` — returns full state to app.
-- `removeSessionState(sessionId, reason)` — delete session + command queues + commands, broadcast removal.
-- `pruneStaleSessions()` — remove sessions past `staleThresholdMs`.
-- `createCommand()` / `markCommandStatus()` — command lifecycle.
-
-### Flutter Android app
-
-Main files:
-
-- `apps/omp_hub_app/lib/main.dart`
-  - Connection persistence via `shared_preferences`.
-  - Auto-connect if URL + token saved.
-  - Maintains current snapshot and selected/detail session.
-
-- `apps/omp_hub_app/lib/src/hub_client.dart`
-  - HTTP + SSE client.
-  - Handles `session_removed` by removing session from local snapshot.
-  - Uses 8 second connection timeout.
-
-- `apps/omp_hub_app/lib/src/mission_control_screen.dart`
-  - Main shell/tabs.
-  - On narrow/mobile layout, agent detail is an inner screen, not a tab.
-
-- `apps/omp_hub_app/lib/src/session_detail_screen.dart`
-  - Terminal/TUI-style agent detail.
-  - Commands/tools/tool-like transcript entries collapse by default.
-
-- `apps/omp_hub_app/android/app/src/main/AndroidManifest.xml`
-  - Must keep `android:usesCleartextTraffic="true"` because hub is HTTP.
+- `apps/omp_hub_app/lib/main.dart` - connection state, SSE snapshot, new-session flow.
+- `apps/omp_hub_app/lib/src/hub_client.dart` - HTTP + SSE client and agent-create request serialization.
+- `apps/omp_hub_app/lib/src/hub_models.dart` - API models including `HubServerInfo.availableClis`.
+- `apps/omp_hub_app/lib/src/widgets/new_session_sheet.dart` - conditional CLI picker and model/path/prompt inputs.
+- `apps/omp_hub_app/android/app/src/main/AndroidManifest.xml` - keep `android:usesCleartextTraffic="true"` while hub uses HTTP.
 
 ## API Summary
 
-All non-root routes require `Authorization: Bearer <token>` or `?token=<token>`.
+All routes except `/` require `Authorization: Bearer <token>`. Query-string tokens are not supported.
 
 Core routes:
 
-- `GET /api/health`
-- `GET /api/snapshot`
-- `GET /api/stream` — SSE stream; emits `snapshot`, `session_updated`, `session_removed`, etc.
+- `GET /api/health` - server status, addresses, capabilities, and `availableClis`.
+- `GET /api/snapshot` - full session snapshot, server info, and commands.
+- `GET /api/stream` - SSE stream; emits snapshot/session/command events.
 - `POST /api/register`
 - `POST /api/unregister`
 - `POST /api/presence`
@@ -127,48 +89,30 @@ Core routes:
 - `POST /api/send`
 - `POST /api/control`
 - `GET /api/poll`
+- `GET /api/browse` and `GET /api/v2/browse`
+- `POST /api/send-attachment` and `POST /api/v2/send-attachment`
+- `POST /api/agents/create`
 
-v2 routes:
+## Agent Creation
 
-- `GET /api/v2/browse` — list remote directories on host
-- `POST /api/v2/send-attachment` — send files as attachments to sessions
-- `GET|POST /api/v2/push/devices`
-- `POST /api/v2/agents/create`
+Mobile submits `{ cwd, name?, model?, initialPrompt?, cli? }` to `POST /api/agents/create`.
 
-## Attachment Sending
+Server behavior:
 
-OMP supports image attachments through `omp.sendUserMessage`:
-
-```ts
-omp.sendUserMessage(
-  [
-    { type: "text", text: "Describe this" },
-    { type: "image", mimeType: "image/png", data: "<base64>" }
-  ]
-)
-```
-
-Implementation:
-
-- App uses file picker (images, text files) and supports clipboard paste.
-- App sends `/api/send` payload with `attachments` array.
-- Server validates count/type/size and queues attachments with command.
-- Extension converts command into `TextContent | ImageContent` array and calls `omp.sendUserMessage(content)`.
-- Only inline images and text/code files are supported; arbitrary binaries are rejected.
-
-Limits:
-
-- max attachments: 5
-- image max size: 5 MB each
-- text file max: 100k chars
-- allowed image MIME: png/jpeg/webp/gif if OMP supports it
+- Resolves `cwd` and requires an existing directory.
+- Validates `cli` against `config.agentCreation.commands`.
+- Defaults to `config.agentCreation.defaultCli` when older apps omit `cli`.
+- Spawns only the configured command with `shell: false`.
+- Provides neutral env vars (`HUB_AGENT_*`) plus `OMP_HUB_*` and `PI_HUB_*` aliases.
 
 ## Development Commands
 
 From repo root:
 
 ```bash
+node --check hub-server.mjs
 node --check omp-hub-server.mjs
+node --check pi-hub-server.mjs
 ```
 
 Flutter:
@@ -180,79 +124,43 @@ flutter test
 flutter build apk --release
 ```
 
-Release APK output:
-
-```text
-apps/omp_hub_app/build/app/outputs/flutter-apk/app-release.apk
-```
-
-## Release Flow
-
-1. Commit changes with descriptive message.
-2. Push `master`.
-3. Build release APK.
-4. Create GitHub release with new semver tag and attach APK:
-
-```bash
-gh release create vX.Y.Z apps/omp_hub_app/build/app/outputs/flutter-apk/app-release.apk \
-  --title "OMP Hub vX.Y.Z" \
-  --notes "..."
-```
-
-5. Update locally installed extension checkout:
-
-```bash
-cd ~/.omp/agent/git/github.com/md-riaz/omp-hub && git pull
-```
-
-Current installed extension path on this machine:
-
-```text
-~/.omp/agent/git/github.com/md-riaz/omp-hub/
-```
-
-## Runtime / Troubleshooting Context
+## Runtime / Troubleshooting
 
 Config path:
 
 ```text
-~/.omp/agent/omp-hub/config.json
+~/.hub-dashboard/server/config.json
 ```
 
 Server PID path:
 
 ```text
-~/.omp/agent/omp-hub/server.pid
+~/.hub-dashboard/server/server.pid
 ```
 
 Default server:
 
 ```text
-0.0.0.0:18878
+0.0.0.0:18000
 ```
 
-If app cannot connect without Tailscale:
+If app cannot connect:
 
 - Verify app uses URL from `/hub info`.
 - Verify Android APK has cleartext enabled.
-- Verify host is listening on `0.0.0.0:18878`.
-- Windows firewall or VPS provider firewall must allow inbound TCP `18878`.
-- Changing port does not bypass firewall requirement.
+- Verify host is listening on `0.0.0.0:18000`.
+- Windows firewall or VPS/provider firewall must allow inbound TCP `18000`.
+- Emulator uses `http://10.0.2.2:18000`, not `localhost`.
 
 Admin CMD firewall command:
 
 ```cmd
-netsh advfirewall firewall add rule name="OMP Hub TCP 18878" dir=in action=allow protocol=TCP localport=18878
+netsh advfirewall firewall add rule name="OMP Pi Hub TCP 18000" dir=in action=allow protocol=TCP localport=18000
 ```
 
-PowerShell command can get mangled in some terminals; use Admin CMD if needed.
-
-## Coding Notes / Gotchas
+## Coding Notes
 
 - Keep hub server memory-only unless user explicitly approves persistence.
-- Do not reintroduce `/hub token`; `/hub info` has token.
-- Avoid showing stale/offline sessions in app; server should prune/remove them.
-- For mobile UI, prefer TUI-like compact transcript over dashboard cards in detail view.
-- Keep `android:usesCleartextTraffic="true"` while hub uses HTTP.
-- If adding file uploads, validate size/type on server; do not trust app.
-- If adding public exposure, first add HTTPS/auth hardening/rate limit; current token auth is for trusted networks.
+- Do not allow arbitrary executable strings from mobile clients.
+- Do not trust app-provided file uploads; validate size/type server-side.
+- If adding public exposure, add HTTPS/auth hardening/rate limit first.

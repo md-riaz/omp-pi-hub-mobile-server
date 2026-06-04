@@ -145,7 +145,7 @@ function nowIso() {
 
 function capString(value, max = 20000) {
   if (typeof value !== "string") return value;
-  return value.length > max ? `${value.slice(0, max)}\nâ€¦[truncated ${value.length - max} chars]` : value;
+  return value.length > max ? `${value.slice(0, max)}\n...[truncated ${value.length - max} chars]` : value;
 }
 
 function sanitizeItem(item) {
@@ -1128,7 +1128,7 @@ const server = http.createServer(async (req, res) => {
       "Hub Dashboard server running.",
       `Port: ${config.port}`,
       `LAN: ${localAddresses().map(ip => `http://${ip}:${config.port}`).join(", ") || "none"}`,
-      "Use Hub Mobile with token from ~/.hub-dashboard/server/config.json.",
+      "Use OMP Pi Hub Mobile Companion with token from ~/.hub-dashboard/server/config.json.",
     ].join("\n"));
     return;
   }
