@@ -69,6 +69,12 @@ const DEFAULT_CONFIG: HubConfig = {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const SPAWN_COOLDOWN_MS = 60_000;
+const MAX_SPAWN_FAILURES = 3;
+let lastSpawnAtMs = 0;
+let consecutiveSpawnFailures = 0;
+let spawningServer = false;
+
 function hubHome(): string {
 	if (process.env.HUB_DASHBOARD_DIR) return process.env.HUB_DASHBOARD_DIR;
 	if (process.env.PI_CODING_AGENT_DIR) return join(process.env.PI_CODING_AGENT_DIR, "hub-dashboard");
@@ -103,6 +109,8 @@ function markServerManuallyStopped(): void {
 
 function clearServerManualStop(): void {
 	try { unlinkSync(manualServerStopPath()); } catch {}
+	lastSpawnAtMs = 0;
+	consecutiveSpawnFailures = 0;
 }
 
 function loadConfig(params: HubParams): HubConfig {
@@ -230,9 +238,39 @@ async function ensureServer(config: HubConfig, params: HubParams): Promise<void>
 		throw new Error(`${params.displayName} server was manually stopped. Run /hub start to enable auto-start again.`);
 	}
 
+	if (spawningServer) {
+		await waitForServer(config, params, 7000);
+		return;
+	}
+
+	const now = Date.now();
+	const cooldownRemaining = SPAWN_COOLDOWN_MS - (now - lastSpawnAtMs);
+	if (lastSpawnAtMs > 0 && cooldownRemaining > 0) {
+		throw new Error(
+			`${params.displayName} server failed to start; will retry in ${Math.ceil(cooldownRemaining / 1000)}s`
+		);
+	}
+
+	if (consecutiveSpawnFailures >= MAX_SPAWN_FAILURES) {
+		markServerManuallyStopped();
+		throw new Error(
+			`${params.displayName} server failed to start ${MAX_SPAWN_FAILURES} times. Run /hub start to retry.`
+		);
+	}
+
+	spawningServer = true;
+	lastSpawnAtMs = Date.now();
 	const child = spawnServer(config);
 	child.unref();
-	await waitForServer(config, params, 7000);
+	try {
+		await waitForServer(config, params, 7000);
+		consecutiveSpawnFailures = 0;
+	} catch (err) {
+		consecutiveSpawnFailures++;
+		throw err;
+	} finally {
+		spawningServer = false;
+	}
 }
 
 async function post(config: HubConfig, path: string, body: unknown): Promise<void> {
