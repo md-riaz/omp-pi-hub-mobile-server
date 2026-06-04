@@ -801,17 +801,17 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 		const ctx = liveCtx();
 		const collaborationApi = (ctx as any)?.collaboration || (api as any).collaboration || (ctx as any)?.messageRouter || (api as any).messageRouter;
 		const injector = collaborationApi?.injectMessage || collaborationApi?.sendMessage || collaborationApi?.notify;
-		let appliedToOmpApi = false;
+		let appliedToRuntimeApi = false;
 		let fallbackError: string | undefined;
 		if (typeof injector === "function") {
 			try {
 				await Promise.resolve(injector.call(collaborationApi, { collaborationId, title, text, origin }));
-				appliedToOmpApi = true;
+				appliedToRuntimeApi = true;
 			} catch (error) {
 				fallbackError = error instanceof Error ? error.message : String(error);
 			}
 		}
-		if (!appliedToOmpApi) {
+		if (!appliedToRuntimeApi) {
 			notifyFallback([title, text, fallbackError ? `${params.displayName} collaboration API unavailable: ${fallbackError}` : ""].filter(Boolean).join("\n"), "info");
 		}
 		await sendEvent({
@@ -820,7 +820,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			title,
 			text,
 			origin,
-			appliedToOmpApi,
+			appliedToOmpApi: appliedToRuntimeApi,
 			error: fallbackError,
 		});
 	}
