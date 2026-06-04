@@ -216,7 +216,7 @@ async function waitForServer(config: HubConfig, params: HubParams, timeoutMs = 5
 	throw new Error(`${params.displayName} server did not start within timeout`);
 }
 
-async function ensureServer(config: HubConfig, params: HubParams): Promise<void> {
+async function ensureServer(config: HubConfig, params: HubParams, waitMs = 7000): Promise<void> {
 	try {
 		const response = await fetch(`${serverBaseUrl(config)}/api/health`, {
 			headers: { authorization: `Bearer ${config.token}` },
@@ -239,7 +239,7 @@ async function ensureServer(config: HubConfig, params: HubParams): Promise<void>
 	}
 
 	if (spawningServer) {
-		await waitForServer(config, params, 7000);
+		await waitForServer(config, params, waitMs);
 		return;
 	}
 
@@ -263,10 +263,17 @@ async function ensureServer(config: HubConfig, params: HubParams): Promise<void>
 	const child = spawnServer(config);
 	child.unref();
 	try {
-		await waitForServer(config, params, 7000);
+		await waitForServer(config, params, waitMs);
 		consecutiveSpawnFailures = 0;
 	} catch (err) {
-		consecutiveSpawnFailures++;
+		// Server started but took longer than the timeout — process is alive, just slow.
+		// Don't count this as a spawn failure; background monitor will pick it up.
+		const startedPid = readPid();
+		if (startedPid && isProcessRunning(startedPid)) {
+			consecutiveSpawnFailures = 0;
+		} else {
+			consecutiveSpawnFailures++;
+		}
 		throw err;
 	} finally {
 		spawningServer = false;
@@ -786,7 +793,7 @@ export function createHubExtension(api: any, params: HubParams) {
 		const sub = args.trim().toLowerCase();
 		if (sub === "start") {
 			clearServerManualStop();
-			await ensureServer(config, params);
+			await ensureServer(config, params, 20000);
 			serverOk = true;
 			startBackgroundLoops();
 			await register(ctx);
@@ -1154,7 +1161,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			if (sub === "start") {
 				try {
 					clearServerManualStop();
-					await ensureServer(config, params);
+					await ensureServer(config, params, 20000);
 					serverOk = true;
 					startBackgroundLoops();
 					await register(ctx);
