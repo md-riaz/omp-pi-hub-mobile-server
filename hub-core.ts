@@ -163,41 +163,28 @@ function readPid(): number | null {
 	}
 }
 
-function getWindowsLauncherPath(): string {
-	return join(hubDir(), "server-launch.vbs");
-}
-
-function quoteWindowsArg(value: string): string {
-	return `"${value.replace(/"/g, '""')}"`;
-}
-
 function spawnServer(config: HubConfig): ChildProcess {
 	mkdirSync(hubDir(), { recursive: true });
 	const script = getServerScript();
+	const env = { ...process.env, HUB_DASHBOARD_DIR: hubHome() };
 	if (process.platform === "win32") {
-		const commandLine = [quoteWindowsArg(process.execPath), quoteWindowsArg(script)].join(" ");
-		const launcher = getWindowsLauncherPath();
-		writeFileSync(
-			launcher,
-			[
-				'Set WshShell = CreateObject("WScript.Shell")',
-				`WshShell.Run "${commandLine.replace(/"/g, '""')}", 0, False`,
-				'Set WshShell = Nothing',
-				"",
-			].join("\r\n"),
-		);
-		return spawn("wscript.exe", [launcher], {
+		// Use cmd /c start /b for a native detached hidden process on Windows.
+		// The empty string "" is the required window-title argument for start.
+		// /d disables cmd AutoRun registry hooks for a clean launch.
+		return spawn("cmd.exe", ["/d", "/c", "start", "", "/b", process.execPath, script], {
 			detached: true,
 			stdio: "ignore",
 			windowsHide: true,
-			env: { ...process.env, HUB_DASHBOARD_DIR: hubHome() },
+			env,
 		});
 	}
-	return spawn(process.execPath, [script], {
+	// Use sh -c exec on Linux/macOS so the shell is replaced by the server
+	// process directly (no intermediary sh left running).
+	const shEscape = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+	return spawn("/bin/sh", ["-c", `exec ${shEscape(process.execPath)} ${shEscape(script)}`], {
 		detached: true,
 		stdio: "ignore",
-		windowsHide: true,
-		env: { ...process.env, HUB_DASHBOARD_DIR: hubHome() },
+		env,
 	});
 }
 
@@ -216,7 +203,7 @@ async function waitForServer(config: HubConfig, params: HubParams, timeoutMs = 5
 	throw new Error(`${params.displayName} server did not start within timeout`);
 }
 
-async function ensureServer(config: HubConfig, params: HubParams): Promise<void> {
+async function ensureServer(config: HubConfig, params: HubParams, waitMs = 7000): Promise<void> {
 	try {
 		const response = await fetch(`${serverBaseUrl(config)}/api/health`, {
 			headers: { authorization: `Bearer ${config.token}` },
@@ -239,7 +226,7 @@ async function ensureServer(config: HubConfig, params: HubParams): Promise<void>
 	}
 
 	if (spawningServer) {
-		await waitForServer(config, params, 7000);
+		await waitForServer(config, params, waitMs);
 		return;
 	}
 
@@ -263,10 +250,17 @@ async function ensureServer(config: HubConfig, params: HubParams): Promise<void>
 	const child = spawnServer(config);
 	child.unref();
 	try {
-		await waitForServer(config, params, 7000);
+		await waitForServer(config, params, waitMs);
 		consecutiveSpawnFailures = 0;
 	} catch (err) {
-		consecutiveSpawnFailures++;
+		// Server started but took longer than the timeout — process is alive, just slow.
+		// Don't count this as a spawn failure; background monitor will pick it up.
+		const startedPid = readPid();
+		if (startedPid && isProcessRunning(startedPid)) {
+			consecutiveSpawnFailures = 0;
+		} else {
+			consecutiveSpawnFailures++;
+		}
 		throw err;
 	} finally {
 		spawningServer = false;
@@ -786,7 +780,7 @@ export function createHubExtension(api: any, params: HubParams) {
 		const sub = args.trim().toLowerCase();
 		if (sub === "start") {
 			clearServerManualStop();
-			await ensureServer(config, params);
+			await ensureServer(config, params, 20000);
 			serverOk = true;
 			startBackgroundLoops();
 			await register(ctx);
@@ -1154,7 +1148,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			if (sub === "start") {
 				try {
 					clearServerManualStop();
-					await ensureServer(config, params);
+					await ensureServer(config, params, 20000);
 					serverOk = true;
 					startBackgroundLoops();
 					await register(ctx);
