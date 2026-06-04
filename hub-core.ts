@@ -178,10 +178,12 @@ function spawnServer(config: HubConfig): ChildProcess {
 			env,
 		});
 	}
-	return spawn(process.execPath, [script], {
+	// Use sh -c exec on Linux/macOS so the shell is replaced by the server
+	// process directly (no intermediary sh left running).
+	const shEscape = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+	return spawn("/bin/sh", ["-c", `exec ${shEscape(process.execPath)} ${shEscape(script)}`], {
 		detached: true,
 		stdio: "ignore",
-		windowsHide: true,
 		env,
 	});
 }
