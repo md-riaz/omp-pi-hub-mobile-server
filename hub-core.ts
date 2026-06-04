@@ -166,11 +166,23 @@ function readPid(): number | null {
 function spawnServer(config: HubConfig): ChildProcess {
 	mkdirSync(hubDir(), { recursive: true });
 	const script = getServerScript();
+	const env = { ...process.env, HUB_DASHBOARD_DIR: hubHome() };
+	if (process.platform === "win32") {
+		// Use cmd /c start /b for a native detached hidden process on Windows.
+		// The empty string "" is the required window-title argument for start.
+		// /d disables cmd AutoRun registry hooks for a clean launch.
+		return spawn("cmd.exe", ["/d", "/c", "start", "", "/b", process.execPath, script], {
+			detached: true,
+			stdio: "ignore",
+			windowsHide: true,
+			env,
+		});
+	}
 	return spawn(process.execPath, [script], {
 		detached: true,
 		stdio: "ignore",
 		windowsHide: true,
-		env: { ...process.env, HUB_DASHBOARD_DIR: hubHome() },
+		env,
 	});
 }
 
