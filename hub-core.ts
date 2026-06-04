@@ -729,6 +729,8 @@ export function createHubExtension(api: any, params: HubParams) {
 		if (consecutiveHttpFailures >= MAX_CONSECUTIVE_HTTP_FAILURES) {
 			serverOk = false;
 			setUiStatus("Hub ERR");
+			// Reconnect immediately rather than waiting for the next monitorServer tick.
+			void monitorServer();
 		}
 	}
 
@@ -916,19 +918,25 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 
 	async function register(ctx: ExtensionContext): Promise<void> {
 		if (!config.enabled) return;
-		try {
-			await ensureServer(config, params);
-			serverOk = true;
-			consecutiveHttpFailures = 0;
-			await post(config, "/api/register", { session: { ...currentSessionInfo(ctx, config, currentStatus(), params, sessionSlashCommands(), sessionAvailableModels(ctx)), startedAt }, ...clientMetadata(params) });
-			setUiStatus("Hub OK");
-			void pollCommands();
-		} catch (error) {
-			serverOk = false;
-			setUiStatus("Hub ERR");
-			if (ctx.hasUI) {
-				ctx.ui.notify(`${params.displayName} unavailable: ${error instanceof Error ? error.message : String(error)}`, "warning");
+		let lastError: unknown;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+			try {
+				await ensureServer(config, params);
+				serverOk = true;
+				consecutiveHttpFailures = 0;
+				await post(config, "/api/register", { session: { ...currentSessionInfo(ctx, config, currentStatus(), params, sessionSlashCommands(), sessionAvailableModels(ctx)), startedAt }, ...clientMetadata(params) });
+				setUiStatus("Hub OK");
+				void pollCommands();
+				return;
+			} catch (error) {
+				lastError = error;
 			}
+		}
+		serverOk = false;
+		setUiStatus("Hub ERR");
+		if (ctx.hasUI) {
+			ctx.ui.notify(`${params.displayName} unavailable: ${lastError instanceof Error ? lastError.message : String(lastError)}`, "warning");
 		}
 	}
 
