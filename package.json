@@ -55,5 +55,9 @@
       "optional": true
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/md-riaz/omp-pi-hub-mobile-server.git"
+  }
 }

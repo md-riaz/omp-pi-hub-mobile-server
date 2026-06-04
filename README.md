@@ -51,15 +51,15 @@ pi-hub-server.mjs  -> hub-server.mjs
 Install from GitHub in either CLI:
 
 ```bash
-omp install https://github.com/md-riaz/omp-hub-dashboard
-pi install https://github.com/md-riaz/omp-hub-dashboard
+omp install https://github.com/md-riaz/omp-pi-hub-mobile-server
+pi install https://github.com/md-riaz/omp-pi-hub-mobile-server
 ```
 
 For development:
 
 ```bash
-git clone https://github.com/md-riaz/omp-hub-dashboard.git
-cd omp-hub-dashboard
+git clone https://github.com/md-riaz/omp-pi-hub-mobile-server.git
+cd omp-pi-hub-mobile-server
 omp install .
 pi install .
 ```
