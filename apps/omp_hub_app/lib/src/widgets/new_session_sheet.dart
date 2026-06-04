@@ -7,10 +7,12 @@ class NewSessionResult {
   final String path;
   final String prompt;
   final String model;
+  final String cli;
   NewSessionResult({
     required this.path,
     required this.prompt,
     required this.model,
+    required this.cli,
   });
 }
 
@@ -19,6 +21,7 @@ class NewSessionSheet extends StatefulWidget {
   final HubClient? client;
   final List<String> availableModels;
   final String? selectedModel;
+  final List<String> availableClis;
 
   const NewSessionSheet({
     super.key,
@@ -26,6 +29,7 @@ class NewSessionSheet extends StatefulWidget {
     this.client,
     this.availableModels = const [],
     this.selectedModel,
+    this.availableClis = const [],
   });
 
   static Future<void> show(
@@ -34,6 +38,7 @@ class NewSessionSheet extends StatefulWidget {
     HubClient? client,
     List<String> availableModels = const [],
     String? selectedModel,
+    List<String> availableClis = const [],
   }) {
     return showModalBottomSheet(
       context: context,
@@ -44,6 +49,7 @@ class NewSessionSheet extends StatefulWidget {
         client: client,
         availableModels: availableModels,
         selectedModel: selectedModel,
+        availableClis: availableClis,
       ),
     );
   }
@@ -56,6 +62,19 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
   final _pathController = TextEditingController(text: '');
   final _promptController = TextEditingController();
   late String _selectedModel;
+  late String _selectedCli;
+
+  List<String> get _clis {
+    final clis = <String>[];
+    for (final cli in widget.availableClis) {
+      final normalized = cli.trim();
+      if (normalized.isNotEmpty && !clis.contains(normalized)) {
+        clis.add(normalized);
+      }
+    }
+    clis.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return clis;
+  }
 
   List<String> get _models {
     final models = widget.availableModels.isEmpty
@@ -72,6 +91,7 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
         widget.selectedModel != null && _models.contains(widget.selectedModel)
         ? widget.selectedModel!
         : _models.first;
+    _selectedCli = _clis.isEmpty ? '' : _clis.first;
   }
 
   @override
@@ -390,6 +410,64 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
+          if (_clis.length > 1) ...[
+            Text(
+              'CLI',
+              style: HubTheme.bodySmall.copyWith(color: HubTheme.text2),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                for (final cli in _clis) ...[
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedCli = cli),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cli == _selectedCli
+                              ? HubTheme.green.withValues(alpha: 0.1)
+                              : HubTheme.card,
+                          border: Border.all(
+                            color: cli == _selectedCli
+                                ? HubTheme.green.withValues(alpha: 0.4)
+                                : HubTheme.softLine,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              cli,
+                              style: const TextStyle(
+                                color: HubTheme.text,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (cli == _selectedCli) ...[
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.check_circle,
+                                size: 16,
+                                color: HubTheme.green,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (cli != _clis.last) const SizedBox(width: 8),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           Text(
             'Model',
             style: HubTheme.bodySmall.copyWith(color: HubTheme.text2),
@@ -435,6 +513,7 @@ class _NewSessionSheetState extends State<NewSessionSheet> {
                         path: _pathController.text.trim(),
                         prompt: _promptController.text.trim(),
                         model: _selectedModel,
+                        cli: _selectedCli,
                       ),
                     );
                     Navigator.pop(context);

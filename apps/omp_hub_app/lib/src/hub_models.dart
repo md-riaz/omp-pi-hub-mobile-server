@@ -83,6 +83,7 @@ class HubServerInfo {
     required this.schemaVersion,
     required this.capabilities,
     required this.staleThresholdMs,
+    this.availableClis = const [],
   });
 
   final int? pid;
@@ -94,6 +95,7 @@ class HubServerInfo {
   final int schemaVersion;
   final HubServerCapabilities capabilities;
   final int? staleThresholdMs;
+  final List<String> availableClis;
 
   factory HubServerInfo.fromJson(Map<String, dynamic> json) {
     return HubServerInfo(
@@ -108,6 +110,7 @@ class HubServerInfo {
           _optionalMap(json['capabilities'], HubServerCapabilities.fromJson) ??
           HubServerCapabilities.empty(),
       staleThresholdMs: _asInt(json['staleThresholdMs']),
+      availableClis: _stringList(json['availableClis']),
     );
   }
 }

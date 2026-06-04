@@ -11,18 +11,21 @@ class AgentCreateRequest {
     this.name = '',
     this.model = '',
     this.initialPrompt = '',
+    this.cli = '',
   });
 
   final String cwd;
   final String name;
   final String model;
   final String initialPrompt;
+  final String cli;
 
   Map<String, String> toJson() {
     return {
       'cwd': cwd.trim(),
       if (name.trim().isNotEmpty) 'name': name.trim(),
       if (model.trim().isNotEmpty) 'model': model.trim(),
+      if (cli.trim().isNotEmpty) 'cli': cli.trim(),
       if (initialPrompt.trim().isNotEmpty)
         'initialPrompt': initialPrompt.trim(),
     };
@@ -45,9 +48,9 @@ class AgentCreateResult {
   final String? error;
 
   String get summary {
-    final idPart = id == null ? '' : ' · $id';
-    final pidPart = pid == null ? '' : ' · pid $pid';
-    final errorPart = error == null ? '' : ' · $error';
+    final idPart = id == null ? '' : ' Â· $id';
+    final pidPart = pid == null ? '' : ' Â· pid $pid';
+    final errorPart = error == null ? '' : ' Â· $error';
     return '$status$idPart$pidPart$errorPart';
   }
 

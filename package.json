@@ -1,9 +1,11 @@
 {
-  "name": "omp-hub-dashboard",
-  "version": "2.0.45",
-  "description": "Oh My Pi extension and Flutter Android app for monitoring and controlling multiple OMP sessions from a phone over any network.",
+  "name": "pi-omp-hub-dashboard",
+  "version": "2.1.0",
+  "description": "Extension and Flutter app for monitoring and controlling Pi and Oh-My-Pi agent sessions from a phone over any network.",
   "keywords": [
+    "pi-package",
     "omp-package",
+    "pi-coding-agent",
     "oh-my-pi",
     "omp-coding-agent",
     "dashboard",
@@ -13,8 +15,12 @@
   ],
   "main": "omp-hub.ts",
   "files": [
+    "hub-core.ts",
+    "hub-server.mjs",
     "omp-hub.ts",
     "omp-hub-server.mjs",
+    "pi-hub.ts",
+    "pi-hub-server.mjs",
     "README.md",
     "LICENSE",
     "apps/omp_hub_app/lib/**",
@@ -29,11 +35,25 @@
       "./omp-hub.ts"
     ]
   },
+  "pi": {
+    "extensions": [
+      "./pi-hub.ts"
+    ]
+  },
   "scripts": {
-    "hub:server": "node omp-hub-server.mjs"
+    "hub:server": "node hub-server.mjs"
   },
   "peerDependencies": {
-    "@oh-my-pi/pi-coding-agent": ">=0.60.0"
+    "@oh-my-pi/pi-coding-agent": ">=0.60.0",
+    "@earendil-works/pi-coding-agent": ">=0.60.0"
+  },
+  "peerDependenciesMeta": {
+    "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
   },
   "license": "MIT"
 }

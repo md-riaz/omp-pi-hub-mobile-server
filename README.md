@@ -1,83 +1,74 @@
-# OMP Hub
+# Hub Dashboard
 
-**Version: 2.0.45+45**
+**Version: 2.1.0**
 
-OMP Hub is a local-first mission-control dashboard for Oh My Pi Coding Agent sessions. It combines an OMP extension, a small HTTP/SSE hub server, and a Flutter Android app so you can monitor and control multiple running agents from a phone over any network that can reach the hub host.
+Hub Dashboard is a local-first mission-control server and Android app for both Oh-My-Pi (`omp`) and Pi (`pi`) Coding Agent sessions. One shared extension core, one HTTP/SSE server, one token, and one Flutter app show sessions from both CLIs together.
 
-> Status: early but usable. The hub is designed for private networks and should not be exposed directly to the public internet.
+> Status: early but usable. The hub is designed for trusted private networks and should not be exposed directly to the public internet.
 
 ## What you get
 
-- Live overview of connected OMP sessions, health, model, context usage, active tools, and recent transcript entries.
-- Mobile prompt sending and controls for abort, compact, model switch, and shutdown.
-- Command lifecycle visibility beyond simple queued snackbars.
-- Chat-style session detail with user bubbles, assistant bubbles (streaming cursor), tool groups, terminal cards, edit cards, waiting cards.
-- Real file attachments: pick files, pick images, paste from clipboard.
-- Server browse endpoint for remote directory listing.
-- Model sheet with scrollable list.
-- Agent creation endpoint for starting OMP in any existing directory on the hub host.
+- Live overview of connected `omp` and `pi` sessions, health, model, context usage, active tools, and recent transcript entries.
+- Mobile prompt sending and controls for abort, compact, model switch, shutdown, slash commands, and file attachments.
+- Chat-style session detail with user bubbles, assistant bubbles, tool groups, terminal cards, edit cards, and waiting cards.
+- A guarded agent creation endpoint that can start either CLI in an existing directory on the hub host.
+- CLI availability detection. The app shows an `omp` / `pi` picker only when both binaries are available.
 - Bearer-token API auth for all protected routes.
 - Memory-only hub state by default: no transcript database and no cloud dependency.
 
 ## Architecture
 
 ```text
-OMP sessions
-  └─ omp-hub.ts extension
-      ├─ starts/registers with the local hub
-      ├─ streams presence, transcript, tool, and command-result events
-      └─ polls for queued mobile commands
+omp sessions                  pi sessions
+  |                             |
+  | omp-hub.ts wrapper          | pi-hub.ts wrapper
+  \------------ hub-core.ts ----/
+                  |
+                  v
+            hub-server.mjs
+       token-protected JSON + SSE
+                  |
+                  v
+        apps/omp_hub_app (Hub Mobile)
+```
 
-Hub host
-  └─ omp-hub-server.mjs
-      ├─ token-protected HTTP JSON API
-      ├─ SSE live stream for the mobile app
-      ├─ in-memory sessions and commands
-      └─ guarded process creation in existing directories
+Compatibility shims remain:
 
-Android device
-  └─ apps/omp_hub_app
-      ├─ Connection screen → Session list → Session detail (chat-style)
-      ├─ Composer with attachment/slash/model buttons
-      └─ Bottom sheets: model, slash, attachment, session menu, new session, broadcast, diff drawer
+```text
+omp-hub-server.mjs -> hub-server.mjs
+pi-hub-server.mjs  -> hub-server.mjs
 ```
 
 ## Requirements
 
-- Oh My Pi Coding Agent `>=0.60.0`.
-- Node.js `18+` on the machine running OMP sessions.
+- Oh-My-Pi Coding Agent `>=0.60.0` and/or Pi Coding Agent `>=0.60.0`.
+- Node.js `18+` on the hub host.
 - Flutter/Dart if you want to run or build the Android app from source.
-- Android emulator, USB-connected Android device, or phone on any network that can reach the hub host (same WiFi, VPN, etc.).
+- Android device, emulator, or phone on any network route that reaches the hub host.
 
 ## Installation
 
-### 1. Install the OMP extension
-
-Install directly from GitHub:
+Install from GitHub in either CLI:
 
 ```bash
-omp install https://github.com/md-riaz/omp-hub
+omp install https://github.com/md-riaz/omp-hub-dashboard
+pi install https://github.com/md-riaz/omp-hub-dashboard
 ```
 
-Equivalent Git source form:
+For development:
 
 ```bash
-omp install git:github.com/md-riaz/omp-hub
-```
-
-For development, install from a local checkout instead:
-
-```bash
-git clone https://github.com/md-riaz/omp-hub.git
-cd omp-hub
+git clone https://github.com/md-riaz/omp-hub-dashboard.git
+cd omp-hub-dashboard
 omp install .
+pi install .
 ```
 
-Restart the OMP sessions you want to manage. OMP loads installed extensions only when a session starts, so already-running sessions will not pick up `omp-hub.ts` until they are restarted. Each restarted session loads `omp-hub.ts`, starts the hub server if needed, and registers with it.
+Restart sessions after install. Extensions load when a session starts, so already-running sessions will not pick up the wrapper until restarted.
 
-### 2. Check the hub from OMP
+## Hub Commands
 
-Inside any OMP session:
+Inside either CLI session:
 
 ```text
 /hub info
@@ -86,16 +77,42 @@ Inside any OMP session:
 Useful commands:
 
 ```text
-/hub              # show hub status
+/hub              # show hub info
 /hub start        # start or reconnect to the hub server
-/hub info         # show LAN IPs, token, and status
-/hub stop         # disconnect this session from hub
-/hub server stop  # kill the hub server (all sessions)
+/hub info         # show LAN IPs, token, and config path
+/hub status       # show server/session status
+/hub firewall     # show host firewall hints
+/hub stop         # disconnect this session only
+/hub server stop  # kill the shared hub server
 ```
 
-## Mobile app
+## Connecting From Android
 
-### Run in development
+The app needs the hub URL and token.
+
+Shared config path:
+
+```text
+~/.hub-dashboard/server/config.json
+```
+
+Default server:
+
+```text
+0.0.0.0:18000
+```
+
+Common URLs:
+
+- Android emulator: `http://10.0.2.2:18000`
+- Phone on same WiFi/LAN: `http://<hub-host-lan-ip>:18000`
+- Phone over VPN or other network: any IP that reaches the hub host
+
+Run `/hub info` to see detected LAN IPs. Keep the hub on trusted networks and allow inbound TCP `18000` through the host firewall only when needed.
+
+## Mobile App
+
+Run in development:
 
 ```bash
 cd apps/omp_hub_app
@@ -103,7 +120,7 @@ flutter pub get
 flutter run
 ```
 
-### Build an APK
+Build an APK:
 
 ```bash
 cd apps/omp_hub_app
@@ -116,47 +133,12 @@ APK output:
 apps/omp_hub_app/build/app/outputs/flutter-apk/app-release.apk
 ```
 
-For quick local testing you can also build a debug APK:
-
-```bash
-flutter build apk --debug
-```
-
-## Connecting from Android
-
-The app needs the hub URL and token.
-
-Token file on the hub host:
-
-```text
-~/.omp/agent/omp-hub/config.json
-```
-
-Common URLs (the app adds `http://` automatically if you enter only `host:port`):
-
-- Android emulator: `http://10.0.2.2:18878`
-- Phone on same WiFi/LAN: `http://<hub-host-lan-ip>:18878`
-- Phone over VPN or other network: use any IP that reaches the hub host
-
-Run `/hub info` to see detected LAN IPs. The server binds `0.0.0.0` by default for phone-first LAN/VPN access. Keep the hub on trusted networks and allow inbound TCP `18878` through the hub host firewall only when needed.
-
-## Daily usage
-
-1. Start or restart your OMP sessions.
-2. Open the Android app.
-3. Enter the hub URL and token, then tap **Connect**.
-4. Select a session.
-5. Review chat history, tools, and health in a terminal-style view.
-6. Use composer to send messages, attach files, or run slash commands.
-
-Commands are queued on the hub and picked up by OMP sessions during polling. The default polling interval is `1500ms`.
-
 ## Configuration
 
-OMP Hub creates this config file automatically:
+The hub creates this config automatically:
 
 ```text
-~/.omp/agent/omp-hub/config.json
+~/.hub-dashboard/server/config.json
 ```
 
 Example:
@@ -165,14 +147,18 @@ Example:
 {
   "enabled": true,
   "host": "0.0.0.0",
-  "port": 18878,
+  "port": 18000,
   "token": "generated-token",
   "historyLimit": 500,
   "autoStartServer": true,
   "pollIntervalMs": 1500,
   "corsOrigins": [],
   "agentCreation": {
-    "ompCommand": "omp",
+    "commands": {
+      "omp": "omp",
+      "pi": "pi"
+    },
+    "defaultCli": "omp",
     "defaultArgs": [],
     "testMode": false
   }
@@ -181,45 +167,29 @@ Example:
 
 Key fields:
 
-- `enabled`: enables the extension bridge.
-- `host`: bind address. Defaults to `0.0.0.0` so a phone can reach the hub on trusted LAN/VPN/Tailscale paths. Use `127.0.0.1` for local-only access.
-- `port`: hub server port.
+- `host`: bind address. Defaults to `0.0.0.0` for phone-first LAN/VPN access.
+- `port`: hub server port. Defaults to `18000`.
 - `token`: bearer token required by the app and API.
-- `historyLimit`: maximum in-memory transcript items per session.
-- `autoStartServer`: lets the extension start the hub automatically.
-- `pollIntervalMs`: how often sessions poll for mobile commands.
-- `corsOrigins`: browser CORS allowlist. Empty disables browser cross-origin access.
-- `agentCreation`: controls which OMP command/default args are used for creating new sessions.
+- `autoStartServer`: lets either extension wrapper start the shared server automatically.
+- `agentCreation.commands`: maps CLI ids (`omp`, `pi`) to binaries or absolute paths.
+- `agentCreation.defaultCli`: used when old apps omit `cli`.
+- `agentCreation.testMode`: runs spawned commands in foreground test mode.
 
-Restart OMP sessions and the hub server after changing configuration.
+Restart CLI sessions and the hub server after changing configuration.
 
-## Agent creation
+## Agent Creation
 
-Agent creation starts a new local process on the hub host and accepts any existing directory as the process working directory.
-
-Example configuration:
-
-```json
-{
-  "agentCreation": {
-    "ompCommand": "omp",
-    "defaultArgs": [],
-    "testMode": false
-  }
-}
-```
+`POST /api/agents/create` starts a new local process on the hub host in an existing directory. The request may include `cli: "omp"` or `cli: "pi"`. If omitted, the server uses `agentCreation.defaultCli`.
 
 Security model:
 
-- The app cannot choose an arbitrary executable.
-- The server launches `agentCreation.ompCommand` with `shell: false`.
-- Requested working directories are resolved and must already exist as directories on the hub host.
+- The app chooses only a configured CLI id, not an arbitrary executable.
+- The server launches the configured command with `shell: false`.
+- Requested working directories are resolved and must already exist.
 
-Bearer-token access can start OMP in any existing directory on the hub host. Keep the hub on trusted LAN/VPN/Tailscale paths.
+Bearer-token access can start configured CLIs in any existing directory on the hub host. Keep the hub on trusted paths.
 
-## Manual server run
-
-Normally the extension starts the server. To run it manually:
+## Manual Server Run
 
 ```bash
 npm run hub:server
@@ -228,65 +198,58 @@ npm run hub:server
 Health check:
 
 ```bash
-curl -H "Authorization: Bearer <token>" "http://127.0.0.1:18878/api/health"
+curl -H "Authorization: Bearer <token>" "http://127.0.0.1:18000/api/health"
 ```
 
-## API summary
+`/api/health` and `/api/snapshot` include `availableClis`, which the app uses to decide whether to show the CLI picker.
+
+## API Summary
 
 All API routes except `/` require `Authorization: Bearer <token>`. Query-string tokens are not supported.
 
-### Canonical routes
+- `GET /api/health` - server status, local addresses, capabilities, and available CLIs.
+- `GET /api/snapshot` - full session snapshot.
+- `GET /api/stream` - SSE snapshot/session update stream.
+- `POST /api/register` - register an agent session.
+- `POST /api/unregister` - remove a session.
+- `POST /api/presence` - update session status/model/context.
+- `POST /api/event` - push transcript, tool, and other session events.
+- `POST /api/send` - queue a user prompt.
+- `POST /api/control` - queue `abort`, `compact`, `set_model`, or `shutdown`.
+- `GET /api/poll` - session command polling endpoint.
+- `POST /api/agents/create` - guarded agent creation.
+- `GET /api/browse` and `GET /api/v2/browse` - list remote directories.
+- `POST /api/send-attachment` and `POST /api/v2/send-attachment` - send files as attachments.
 
-- `GET /api/health` — server status and local addresses.
-- `GET /api/snapshot` — full session snapshot.
-- `GET /api/stream` — SSE snapshot/session update stream.
-- `POST /api/register` — register an OMP session.
-- `POST /api/unregister` — mark an OMP session offline.
-- `POST /api/presence` — update session status/model/context.
-- `POST /api/event` — push transcript, tool, and other session events.
-- `POST /api/send` — queue a user prompt.
-- `POST /api/control` — queue `abort`, `compact`, `set_model`, or `shutdown`.
-- `GET /api/poll` — OMP session command polling endpoint.
+## Security Notes
 
-### Extended routes
+Hub Dashboard is intended for trusted network environments. Do not expose it directly to the public internet without HTTPS, stronger authentication, token rotation, rate limiting, and audit controls.
 
-- `POST /api/agents/create` — guarded agent creation in any existing directory.
-- `GET /api/browse` — list remote directories.
-- `POST /api/send-attachment` — send files as attachments.
-
-See [`docs/omp-hub-v2-protocol.md`](docs/omp-hub-v2-protocol.md) for protocol notes.
-
-## Security notes
-
-OMP Hub is intended for trusted network environments (LAN, VPN, Tailscale, etc.).
-
-Do not expose the hub directly to the public internet without additional hardening. Before public exposure, add HTTPS, stronger authentication, token rotation, rate limiting, and persistent audit controls.
-
-Protect `~/.omp/agent/omp-hub/config.json`; it contains the bearer token. Bearer-token access can start new local processes in any existing directory on the hub host.
+Protect `~/.hub-dashboard/server/config.json`; it contains the bearer token.
 
 ## Troubleshooting
 
-- **No sessions visible**: restart OMP sessions after installing the extension, then run `/hub start`.
-- **Phone cannot connect**: run `/hub info` to see LAN IPs and check firewall rules for TCP `18878`.
-- **Unauthorized**: copy the current token from `~/.omp/agent/omp-hub/config.json`.
-- **Stale server state**: stop the old Node process or remove the stale `~/.omp/agent/omp-hub/server.pid`, then run `/hub start`.
-- **Emulator cannot connect**: use `http://10.0.2.2:18878`, not `localhost`.
+- **No sessions visible**: restart CLI sessions after installing the extension, then run `/hub start`.
+- **Phone cannot connect**: run `/hub info` and check firewall rules for TCP `18000`.
+- **Unauthorized**: copy the current token from `~/.hub-dashboard/server/config.json`.
+- **CLI picker missing**: the server detected zero or one configured CLI binary. Check `agentCreation.commands` and `PATH`.
+- **Emulator cannot connect**: use `http://10.0.2.2:18000`, not `localhost`.
 
 ## Development
 
 ```bash
+node --check hub-server.mjs
 node --check omp-hub-server.mjs
+node --check pi-hub-server.mjs
 cd apps/omp_hub_app
 flutter analyze
 flutter test
 ```
 
-### AI agent onboarding
+Future AI agents should read:
 
-Future AI agents should read these first:
-
-- [`AGENTS.md`](AGENTS.md) — project map, decisions, workflows, gotchas.
-- [`docs/ai-context.md`](docs/ai-context.md) — compact context reference and task entry points.
+- [`AGENTS.md`](AGENTS.md)
+- [`docs/ai-context.md`](docs/ai-context.md)
 
 ## License
 

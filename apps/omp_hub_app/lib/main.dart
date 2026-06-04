@@ -89,7 +89,7 @@ class _PendingUserMessage {
       timestamp: createdAt,
       text: text,
       metadata: {
-        'commandStatus': failed ? 'send failed · kept locally' : 'sending...',
+        'commandStatus': failed ? 'send failed Â· kept locally' : 'sending...',
         'localPending': true,
         'clientCommandId': id,
         if (commandId != null) 'commandId': commandId,
@@ -115,7 +115,6 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   static const _secureStorage = FlutterSecureStorage();
   static const _pendingMessageTtl = Duration(minutes: 2);
   static const _failedPendingRetention = Duration(minutes: 10);
-
 
   final TextEditingController _serverController = TextEditingController();
   final TextEditingController _tokenController = TextEditingController();
@@ -300,9 +299,13 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   }
 
   void _attachPendingCommand(String clientCommandId, String commandId) {
-    final index = _pendingMessages.indexWhere((message) => message.id == clientCommandId);
+    final index = _pendingMessages.indexWhere(
+      (message) => message.id == clientCommandId,
+    );
     if (index < 0) return;
-    _pendingMessages[index] = _pendingMessages[index].copyWith(commandId: commandId);
+    _pendingMessages[index] = _pendingMessages[index].copyWith(
+      commandId: commandId,
+    );
     unawaited(_savePendingMessages());
   }
 
@@ -330,7 +333,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       }
       final commandId = message.commandId;
       if (commandId != null &&
-          snapshot.commands.any((command) => command.id == commandId && !command.isPending)) {
+          snapshot.commands.any(
+            (command) => command.id == commandId && !command.isPending,
+          )) {
         deliveredIds.add(message.id);
       }
     }
@@ -355,7 +360,8 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   bool _hasServerUserMessage(HubSession session, _PendingUserMessage pending) {
     return session.history.any((item) {
       final commandId = item.metadata['commandId']?.toString();
-      if (pending.commandId != null && commandId == pending.commandId) return true;
+      if (pending.commandId != null && commandId == pending.commandId)
+        return true;
       return item.kind == 'user' &&
           !item.id.startsWith('local-') &&
           item.text.trim() == pending.text.trim();
@@ -427,7 +433,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       return 'Server not running or wrong address. Run /hub start then /hub info to get the correct URL.';
     }
     if (lower.contains('timed out') || lower.contains('timeout')) {
-      return 'Could not reach the server.\n\n• Check the URL matches /hub info output\n• Ensure port 18878 is open in Windows Firewall\n• Phone and host must be on the same network';
+      return 'Could not reach the server.\n\nâ€¢ Check the URL matches /hub info output\nâ€¢ Ensure port 18878 is open in Windows Firewall\nâ€¢ Phone and host must be on the same network';
     }
     if (lower.contains('cleartext')) {
       return 'Android blocks HTTP. Use the latest APK from GitHub Releases.';
@@ -435,7 +441,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
     if (lower.contains('socketexception') ||
         lower.contains('network is unreachable') ||
         lower.contains('failed host lookup')) {
-      return 'Network unreachable.\n\n• Use the LAN IP from /hub info (not localhost)\n• Phone and host must share a network\n• Check firewall allows inbound TCP 18878';
+      return 'Network unreachable.\n\nâ€¢ Use the LAN IP from /hub info (not localhost)\nâ€¢ Phone and host must share a network\nâ€¢ Check firewall allows inbound TCP 18878';
     }
     if (lower.contains('connection reset') || lower.contains('broken pipe')) {
       return 'Connection dropped. The server may have restarted. Tap Connect to retry.';
@@ -462,12 +468,14 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         });
       },
       onError: (Object error) {
-        if (!mounted || _manualDisconnect || generation != _streamGeneration) return;
+        if (!mounted || _manualDisconnect || generation != _streamGeneration)
+          return;
         setState(() => _connectionState = 'Reconnecting...');
         _scheduleReconnect();
       },
       onDone: () {
-        if (!mounted || _manualDisconnect || generation != _streamGeneration) return;
+        if (!mounted || _manualDisconnect || generation != _streamGeneration)
+          return;
         setState(() => _connectionState = 'Reconnecting...');
         _scheduleReconnect();
       },
@@ -655,7 +663,8 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         text,
         clientCommandId: clientCommandId,
       );
-      if (command?.id.isNotEmpty == true) _attachPendingCommand(pending.id, command!.id);
+      if (command?.id.isNotEmpty == true)
+        _attachPendingCommand(pending.id, command!.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sent'), duration: Duration(seconds: 1)),
@@ -738,6 +747,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
           availableModels: _availableModelIds(),
           selectedModel:
               _lastUsedModel ?? _snapshot?.sessions.firstOrNull?.model,
+          availableClis: _snapshot?.server?.availableClis ?? const [],
           onStart: (result) async {
             try {
               _lastUsedModel = result.model;
@@ -746,6 +756,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
                   cwd: result.path,
                   initialPrompt: result.prompt,
                   model: result.model == 'default' ? '' : result.model,
+                  cli: result.cli,
                 ),
               );
               if (context.mounted) {
