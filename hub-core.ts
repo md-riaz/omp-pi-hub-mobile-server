@@ -164,8 +164,12 @@ function readPid(): number | null {
 }
 
 function spawnServer(config: HubConfig): ChildProcess {
-	mkdirSync(hubDir(), { recursive: true });
+	const dir = hubDir();
+	mkdirSync(dir, { recursive: true });
 	const script = getServerScript();
+	// Use hubDir() as cwd so the runtime (bun/node) does not find the extension's
+	// package.json in the session's working directory and trigger unexpected
+	// workspace or extension-loading behaviour.
 	const env = { ...process.env, HUB_DASHBOARD_DIR: hubHome() };
 	if (process.platform === "win32") {
 		// Use cmd /c start /b for a native detached hidden process on Windows.
@@ -175,6 +179,7 @@ function spawnServer(config: HubConfig): ChildProcess {
 			detached: true,
 			stdio: "ignore",
 			windowsHide: true,
+			cwd: dir,
 			env,
 		});
 	}
@@ -184,6 +189,7 @@ function spawnServer(config: HubConfig): ChildProcess {
 	return spawn("/bin/sh", ["-c", `exec ${shEscape(process.execPath)} ${shEscape(script)}`], {
 		detached: true,
 		stdio: "ignore",
+		cwd: dir,
 		env,
 	});
 }
@@ -728,7 +734,7 @@ export function createHubExtension(api: any, params: HubParams) {
 		consecutiveHttpFailures++;
 		if (consecutiveHttpFailures >= MAX_CONSECUTIVE_HTTP_FAILURES) {
 			serverOk = false;
-			setUiStatus("Hub ERR");
+			setUiStatus("✗ Hub");
 			// Reconnect immediately rather than waiting for the next monitorServer tick.
 			void monitorServer();
 		}
@@ -883,10 +889,10 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			serverOk = true;
 			consecutiveHttpFailures = 0;
 			await register(ctx);
-			setUiStatus("Hub OK");
+			setUiStatus("✓ Hub");
 		} catch {
 			serverOk = false;
-			setUiStatus("Hub ERR");
+			setUiStatus("✗ Hub");
 		} finally {
 			monitorInFlight = false;
 		}
@@ -926,7 +932,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 				serverOk = true;
 				consecutiveHttpFailures = 0;
 				await post(config, "/api/register", { session: { ...currentSessionInfo(ctx, config, currentStatus(), params, sessionSlashCommands(), sessionAvailableModels(ctx)), startedAt }, ...clientMetadata(params) });
-				setUiStatus("Hub OK");
+				setUiStatus("✓ Hub");
 				void pollCommands();
 				return;
 			} catch (error) {
@@ -934,7 +940,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 			}
 		}
 		serverOk = false;
-		setUiStatus("Hub ERR");
+		setUiStatus("✗ Hub");
 		if (ctx.hasUI) {
 			ctx.ui.notify(`${params.displayName} unavailable: ${lastError instanceof Error ? lastError.message : String(lastError)}`, "warning");
 		}
@@ -958,6 +964,10 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 		pollInFlight = true;
 		try {
 			const data = await getJson(config, `/api/poll?sessionId=${encodeURIComponent(sessionId)}`);
+			if (data?.needsRegister) {
+				void register(ctx);
+				return;
+			}
 			const commands = Array.isArray(data?.commands) ? data.commands : [];
 			for (const command of commands) {
 				try {
@@ -1153,7 +1163,7 @@ async function handleCollaborationMessage(command: any): Promise<void> {
 		}
 		serverOk = false;
 		consecutiveHttpFailures = 0;
-		setUiStatus("Hub off");
+		setUiStatus(undefined);
 		if (presenceTimer) clearInterval(presenceTimer);
 		if (pollTimer) clearInterval(pollTimer);
 		if (monitorTimer) clearInterval(monitorTimer);

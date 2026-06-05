@@ -481,6 +481,8 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   String _connectionErrorHelp(Object error) {
     final message = error.toString();
     final lower = message.toLowerCase();
+    final uri = Uri.tryParse(_serverController.text);
+    final port = (uri != null && uri.port > 0) ? '${uri.port}' : '18000';
     if (lower.contains('401') || lower.contains('unauthorized')) {
       return 'Wrong token. Run /hub info on the host and copy the token.';
     }
@@ -488,7 +490,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       return 'Server not running or wrong address. Run /hub start then /hub info to get the correct URL.';
     }
     if (lower.contains('timed out') || lower.contains('timeout')) {
-      return 'Could not reach the server.\n\n- Check the URL matches /hub info output\n- Ensure port 18000 is open in Windows Firewall\n- Phone and host must be on the same network';
+      return 'Could not reach the server.\n\n- Check the URL matches /hub info output\n- Ensure port $port is open in your firewall\n- Phone and host must be on the same network';
     }
     if (lower.contains('cleartext')) {
       return 'Android blocks HTTP. Use the latest APK from GitHub Releases.';
@@ -496,7 +498,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
     if (lower.contains('socketexception') ||
         lower.contains('network is unreachable') ||
         lower.contains('failed host lookup')) {
-      return 'Network unreachable.\n\n- Use the LAN IP from /hub info (not localhost)\n- Phone and host must share a network\n- Check firewall allows inbound TCP 18000';
+      return 'Network unreachable.\n\n- Use the LAN IP from /hub info (not localhost)\n- Phone and host must share a network\n- Check firewall allows inbound TCP $port';
     }
     if (lower.contains('connection reset') || lower.contains('broken pipe')) {
       return 'Connection dropped. The server may have restarted. Tap Connect to retry.';
