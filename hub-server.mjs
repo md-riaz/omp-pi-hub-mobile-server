@@ -1453,6 +1453,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/poll") {
       const sessionId = url.searchParams.get("sessionId") || "";
       if (!sessionId) throw new Error("sessionId required");
+      if (!commandQueues.has(sessionId)) {
+        sendJson(req, res, 200, { ok: true, commands: [], needsRegister: true });
+        return;
+      }
       expireCommands();
       const queue = commandQueues.get(sessionId) || [];
       const deliverable = [];
