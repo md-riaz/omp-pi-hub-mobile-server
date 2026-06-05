@@ -23,6 +23,7 @@ class MissionControlScreen extends StatefulWidget {
   final VoidCallback? onCompact;
   final VoidCallback? onShutdown;
   final ValueChanged<String>? onModelChanged;
+  final Map<String, List<String>> recentSessionModels;
   final VoidCallback? onNewSession;
   final VoidCallback? onBroadcast;
   final VoidCallback? onDisconnect;
@@ -50,6 +51,7 @@ class MissionControlScreen extends StatefulWidget {
     this.onCompact,
     this.onShutdown,
     this.onModelChanged,
+    this.recentSessionModels = const {},
     this.onNewSession,
     this.onBroadcast,
     this.onDisconnect,
@@ -95,6 +97,7 @@ class _MissionControlScreenState extends State<MissionControlScreen> {
           onCompact: widget.onCompact,
           onShutdown: widget.onShutdown,
           onModelChanged: widget.onModelChanged,
+          recentModelIds: widget.recentSessionModels[session.id] ?? const [],
           onBack: widget.onCloseDetail,
           connectionState: widget.connectionState,
           connected: widget.connected,

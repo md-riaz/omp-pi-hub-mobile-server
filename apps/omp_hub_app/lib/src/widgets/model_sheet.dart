@@ -5,12 +5,14 @@ import '../theme/hub_theme.dart';
 class ModelSheet extends StatefulWidget {
   final List<HubModel> models;
   final String selected;
+  final List<String> recentModelIds;
   final ValueChanged<String> onSelect;
 
   const ModelSheet({
     super.key,
     required this.models,
     required this.selected,
+    this.recentModelIds = const [],
     required this.onSelect,
   });
 
@@ -18,14 +20,19 @@ class ModelSheet extends StatefulWidget {
     BuildContext context, {
     required List<HubModel> models,
     required String selected,
+    List<String> recentModelIds = const [],
     required ValueChanged<String> onSelect,
   }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) =>
-          ModelSheet(models: models, selected: selected, onSelect: onSelect),
+      builder: (_) => ModelSheet(
+        models: models,
+        selected: selected,
+        recentModelIds: recentModelIds,
+        onSelect: onSelect,
+      ),
     );
   }
 
@@ -45,7 +52,18 @@ class _ModelSheetState extends State<ModelSheet> {
 
   List<HubModel> get _sortedModels {
     final models = [...widget.models];
-    models.sort((a, b) => _sortLabel(a).compareTo(_sortLabel(b)));
+    final recentRank = <String, int>{};
+    for (var i = 0; i < widget.recentModelIds.length; i += 1) {
+      recentRank[widget.recentModelIds[i]] = i;
+    }
+    models.sort((a, b) {
+      final aRecent = recentRank[_modelKey(a)];
+      final bRecent = recentRank[_modelKey(b)];
+      if (aRecent != null && bRecent != null) return aRecent.compareTo(bRecent);
+      if (aRecent != null) return -1;
+      if (bRecent != null) return 1;
+      return _sortLabel(a).compareTo(_sortLabel(b));
+    });
     return models;
   }
 
@@ -66,6 +84,12 @@ class _ModelSheetState extends State<ModelSheet> {
     final name = model.name.trim();
     return (name.isNotEmpty ? name : model.id).toLowerCase();
   }
+
+  String _modelKey(HubModel model) =>
+      model.id.isNotEmpty ? model.id : model.name;
+
+  bool _isRecentModel(HubModel model) =>
+      widget.recentModelIds.contains(_modelKey(model));
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +198,7 @@ class _ModelSheetState extends State<ModelSheet> {
                           final selectedModel =
                               model.id == widget.selected ||
                               model.name == widget.selected;
+                          final recentModel = _isRecentModel(model);
                           return GestureDetector(
                             onTap: () {
                               widget.onSelect(model.id);
@@ -207,25 +232,24 @@ class _ModelSheetState extends State<ModelSheet> {
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
-                                        if (model.supportsImages) ...[
+                                        if (recentModel ||
+                                            model.supportsImages) ...[
                                           const SizedBox(height: 4),
-                                          const Row(
-                                            mainAxisSize: MainAxisSize.min,
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 4,
                                             children: [
-                                              Icon(
-                                                Icons.image_outlined,
-                                                size: 13,
-                                                color: HubTheme.accent,
-                                              ),
-                                              SizedBox(width: 4),
-                                              Text(
-                                                'Image capable',
-                                                style: TextStyle(
-                                                  color: HubTheme.accent,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
+                                              if (recentModel)
+                                                const _ModelBadge(
+                                                  icon: Icons.history,
+                                                  label:
+                                                      'Recent for this conversation',
                                                 ),
-                                              ),
+                                              if (model.supportsImages)
+                                                const _ModelBadge(
+                                                  icon: Icons.image_outlined,
+                                                  label: 'Image capable',
+                                                ),
                                             ],
                                           ),
                                         ],
@@ -249,6 +273,32 @@ class _ModelSheetState extends State<ModelSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ModelBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _ModelBadge({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: HubTheme.accent),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: HubTheme.accent,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }

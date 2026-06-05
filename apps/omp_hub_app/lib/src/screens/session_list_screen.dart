@@ -313,32 +313,20 @@ class _SessionListScreenState extends State<SessionListScreen> {
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          FloatingActionButton.extended(
+          FloatingActionButton(
             heroTag: 'new_session',
+            tooltip: 'New session',
             backgroundColor: HubTheme.accent,
             onPressed: widget.onNewSession,
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text(
-              'New session',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            child: const Icon(Icons.add, color: Colors.white),
           ),
           const SizedBox(height: 12),
-          FloatingActionButton.extended(
+          FloatingActionButton(
             heroTag: 'broadcast',
+            tooltip: 'Batch send',
             backgroundColor: HubTheme.card,
             onPressed: widget.onBroadcast,
-            icon: const Icon(Icons.send, color: HubTheme.accent),
-            label: const Text(
-              'Batch send',
-              style: TextStyle(
-                color: HubTheme.accent,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            child: const Icon(Icons.send, color: HubTheme.accent),
           ),
         ],
       ),

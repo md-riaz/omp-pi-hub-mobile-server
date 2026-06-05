@@ -20,6 +20,7 @@ class SessionDetailScreen extends StatefulWidget {
   final VoidCallback? onCompact;
   final VoidCallback? onShutdown;
   final ValueChanged<String>? onModelChanged;
+  final List<String> recentModelIds;
   final VoidCallback? onBack;
   final HubClient client;
   final String connectionState;
@@ -35,6 +36,7 @@ class SessionDetailScreen extends StatefulWidget {
     this.onCompact,
     this.onShutdown,
     this.onModelChanged,
+    this.recentModelIds = const [],
     this.onBack,
     required this.client,
     this.connectionState = 'Live',
@@ -693,11 +695,16 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                const Text('Start the conversation', style: HubTheme.headingM),
+                                const Text(
+                                  'Start the conversation',
+                                  style: HubTheme.headingM,
+                                ),
                                 const SizedBox(height: 6),
                                 Text(
                                   'Send a prompt below. Replies will appear here.',
-                                  style: HubTheme.caption.copyWith(fontSize: 13),
+                                  style: HubTheme.caption.copyWith(
+                                    fontSize: 13,
+                                  ),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -777,6 +784,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                           context,
                           models: models,
                           selected: _currentModel,
+                          recentModelIds: widget.recentModelIds,
                           onSelect: (m) {
                             setState(() => _currentModel = m);
                             widget.onModelChanged?.call(m);
@@ -791,7 +799,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               Positioned(
                 right: 16,
                 bottom: 84,
-                child: FloatingActionButton.small(
+                child: FloatingActionButton(
                   heroTag: 'scroll_to_bottom',
                   tooltip: 'Scroll to bottom',
                   backgroundColor: HubTheme.accent,

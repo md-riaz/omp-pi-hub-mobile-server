@@ -110,6 +110,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   static const _prefToken = 'hub_token';
   static const _prefRecentConnections = 'hub_recent_connections';
   static const _prefPendingMessages = 'hub_pending_user_messages';
+  static const _prefRecentSessionModels = 'hub_recent_session_models';
   static const _secureTokenKey = 'hub_token';
   static const _secureRecentTokenPrefix = 'hub_recent_token_';
   static const _secureStorage = FlutterSecureStorage();
@@ -134,6 +135,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   final Random _random = Random();
   List<Map<String, String>> _recentConnections = [];
   final List<_PendingUserMessage> _pendingMessages = [];
+  final Map<String, List<String>> _recentSessionModels = {};
   String? _lastUsedModel;
 
   bool get _connected =>
@@ -176,6 +178,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       _tokenController.text = savedToken;
     }
     await _loadPendingMessages(prefs);
+    _loadRecentSessionModels(prefs);
     final recentJson = prefs.getStringList(_prefRecentConnections);
     if (recentJson != null) {
       _recentConnections = [];
@@ -252,6 +255,58 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         _recentConnections.map((c) => '${c['name']}|||${c['url']}').toList(),
       );
     }
+  }
+
+  void _loadRecentSessionModels(SharedPreferences prefs) {
+    _recentSessionModels.clear();
+    final raw = prefs.getString(_prefRecentSessionModels);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      for (final entry in decoded.entries) {
+        final sessionId = entry.key.toString();
+        final models = entry.value;
+        if (sessionId.isEmpty || models is! List) continue;
+        final seen = <String>{};
+        _recentSessionModels[sessionId] = [
+          for (final model in models.map((value) => value.toString()))
+            if (model.trim().isNotEmpty && seen.add(model)) model,
+        ].take(5).toList();
+      }
+    } catch (_) {
+      // Ignore corrupt legacy entries.
+    }
+  }
+
+  Future<void> _saveRecentSessionModels() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefRecentSessionModels,
+      jsonEncode(_recentSessionModels),
+    );
+  }
+
+  void _rememberSessionModel(String sessionId, String modelId) {
+    final model = modelId.trim();
+    if (sessionId.isEmpty || model.isEmpty || model == 'unknown') return;
+    final models = [...(_recentSessionModels[sessionId] ?? <String>[])];
+    models.remove(model);
+    models.insert(0, model);
+    final next = models.take(5).toList();
+    if (_recentSessionModels[sessionId]?.join('\u0000') ==
+        next.join('\u0000')) {
+      return;
+    }
+    _recentSessionModels[sessionId] = next;
+    unawaited(_saveRecentSessionModels());
+  }
+
+  HubSnapshot _rememberSnapshotSessionModels(HubSnapshot snapshot) {
+    for (final session in snapshot.sessions) {
+      _rememberSessionModel(session.id, session.model);
+    }
+    return snapshot;
   }
 
   Future<void> _loadPendingMessages(SharedPreferences prefs) async {
@@ -459,7 +514,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         if (!mounted || generation != _streamGeneration) return;
         _streamRetry = 0;
         setState(() {
-          _snapshot = _snapshotWithPendingMessages(snapshot);
+          _snapshot = _snapshotWithPendingMessages(
+            _rememberSnapshotSessionModels(snapshot),
+          );
           if (_detailSessionId != null &&
               !snapshot.sessions.any((s) => s.id == _detailSessionId)) {
             _detailSessionId = null;
@@ -497,7 +554,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
           final snapshot = await _client.fetchSnapshot();
           if (!mounted || _manualDisconnect) return;
           setState(() {
-            _snapshot = _snapshotWithPendingMessages(snapshot);
+            _snapshot = _snapshotWithPendingMessages(
+              _rememberSnapshotSessionModels(snapshot),
+            );
             _connectionState = 'Reconnected';
             _connectionError = null;
           });
@@ -535,7 +594,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       final snapshot = await _client.fetchSnapshot();
       if (!mounted) return;
       setState(() {
-        _snapshot = _snapshotWithPendingMessages(snapshot);
+        _snapshot = _snapshotWithPendingMessages(
+          _rememberSnapshotSessionModels(snapshot),
+        );
         _connectionState = 'Connected';
         _connecting = false;
         _connectionError = null;
@@ -589,7 +650,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       final snapshot = await _client.fetchSnapshot();
       if (!mounted || _manualDisconnect) return;
       setState(() {
-        _snapshot = _snapshotWithPendingMessages(snapshot);
+        _snapshot = _snapshotWithPendingMessages(
+          _rememberSnapshotSessionModels(snapshot),
+        );
         _streamRetry = 0;
         _connectionState = 'Live';
         _connectionError = null;
@@ -694,6 +757,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
 
   Future<void> _runControl(String action, {String? modelId}) async {
     if (_detailSessionId == null) return;
+    if (action == 'set_model' && modelId != null) {
+      _rememberSessionModel(_detailSessionId!, modelId);
+    }
     final label = switch (action) {
       'abort' => 'Stop running response',
       'compact' => 'Compact context',
@@ -739,6 +805,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       onAbort: () => _runControl('abort'),
       onCompact: () => _runControl('compact'),
       onShutdown: () => _runControl('shutdown'),
+      recentSessionModels: _recentSessionModels,
       onModelChanged: (modelId) => _runControl('set_model', modelId: modelId),
       onNewSession: () {
         NewSessionSheet.show(
