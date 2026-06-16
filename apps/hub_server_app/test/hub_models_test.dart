@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omp_pi_hub_mobile_companion/src/hub_models.dart';
+import 'package:hub_server_app/src/hub_models.dart';
 
 void main() {
   test('parses v2 mission-control fixture with 20 sessions', () async {

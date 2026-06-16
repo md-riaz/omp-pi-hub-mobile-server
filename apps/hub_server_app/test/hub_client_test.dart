@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omp_pi_hub_mobile_companion/src/hub_client.dart';
+import 'package:hub_server_app/src/hub_client.dart';
 
 void main() {
   test('AgentCreateRequest serializes cli only when selected', () {

@@ -12,7 +12,6 @@ export interface HubParams {
 	displayName: string;
 	tuiName: string;
 	uiStatusKey: string;
-	cliCommand: string;
 }
 
 type ExtensionContext = any;
@@ -25,11 +24,6 @@ interface HubConfig {
 	historyLimit: number;
 	autoStartServer: boolean;
 	pollIntervalMs: number;
-	agentCreation: {
-		cliCommand?: string;
-		defaultArgs?: string[];
-		testMode?: boolean;
-	};
 }
 
 interface HubItem {
@@ -60,11 +54,6 @@ const DEFAULT_CONFIG: HubConfig = {
 	historyLimit: 500,
 	autoStartServer: true,
 	pollIntervalMs: 1500,
-	agentCreation: {
-		cliCommand: "",
-		defaultArgs: [],
-		testMode: false,
-	},
 };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -124,8 +113,6 @@ function loadConfig(params: HubParams): HubConfig {
 		config.token = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 16);
 	}
 	config.port = Number(config.port) || DEFAULT_CONFIG.port;
-	config.agentCreation = { ...DEFAULT_CONFIG.agentCreation, ...(config.agentCreation || {}) };
-	config.agentCreation.cliCommand = String(config.agentCreation.cliCommand || params.cliCommand);
 	config.historyLimit = Number(config.historyLimit) || DEFAULT_CONFIG.historyLimit;
 	config.pollIntervalMs = Math.max(500, Number(config.pollIntervalMs) || DEFAULT_CONFIG.pollIntervalMs);
 	writeFileSync(configPath(), JSON.stringify(config, null, 2));
@@ -752,10 +739,43 @@ export function createHubExtension(api: any, params: HubParams) {
 		} catch {}
 	}
 
+	function hubEventType(type: string): string {
+		const map: Record<string, string> = {
+			history: "session.history",
+			presence: "session.presence",
+			register: "session.registered",
+			unregister: "session.unregistered",
+			agent_start: "session.agent_start",
+			agent_end: "session.agent_end",
+			message_update: "session.message_update",
+			message_end: "session.message_end",
+			tool_start: "session.tool_start",
+			tool_update: "session.tool_update",
+			tool_end: "session.tool_end",
+			input: "session.input",
+			command_received: "command.result",
+			command_queued: "command.queued",
+			model_select: "session.model_select",
+			thinking_level_select: "session.thinking_level_select",
+			collaboration_message: "session.collaboration_message",
+		};
+		return map[type] || type || "session.event";
+	}
+
 	async function sendEvent(event: Record<string, unknown>): Promise<void> {
 		if (!config.enabled || !sessionId || !serverOk) return;
+		const rawType = String(event.type || "session.event");
+		const payload = { ...event };
+		delete (payload as Record<string, unknown>).type;
 		try {
-			await post(config, "/api/event", { sessionId, event });
+			await post(config, "/api/event", {
+				sessionId,
+				event: {
+					schemaVersion: HUB_PROTOCOL_VERSION,
+					type: hubEventType(rawType),
+					payload,
+				},
+			});
 			markHttpSuccess();
 		} catch {
 			markHttpFailure();

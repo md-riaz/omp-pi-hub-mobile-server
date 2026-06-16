@@ -9,7 +9,7 @@ This repo is the unified `omp-pi-hub-mobile-server` project. Read this before ed
 It has three runtime pieces:
 
 1. `hub-core.ts` plus wrappers `omp-hub.ts` and `pi-hub.ts`.
-2. `hub-server.mjs`, with `omp-hub-server.mjs` and `pi-hub-server.mjs` as compatibility shims.
+2. `hub-server.mjs`.
 3. `apps/hub_server_app`, the Hub Server App Flutter Android app.
 
 Primary user goal: monitor and control many OMP and Pi sessions from Android without RDP, with one URL, one token, and one combined session list.
@@ -60,8 +60,7 @@ Extension:
 Server:
 
 - `hub-server.mjs` - shared Node HTTP/SSE server, default `0.0.0.0:18000`.
-- `omp-hub-server.mjs` and `pi-hub-server.mjs` - import shims for back compatibility.
-- `snapshot()` - returns server info, sessions, commands, and `availableClis`.
+- `summarySnapshot()` - returns lightweight server info, thread summaries, and `availableClis`.
 - `removeSessionState()` - deletes session, command queues, commands, and broadcasts removal.
 - `validateAgentCreationRequest()` / `startAgentCreation()` - validate CLI id/cwd and spawn configured command with `shell: false`.
 
@@ -80,8 +79,8 @@ All routes except `/` require `Authorization: Bearer <token>`. Query-string toke
 Core routes:
 
 - `GET /api/health` - server status, addresses, capabilities, and `availableClis`.
-- `GET /api/snapshot` - full session snapshot, server info, and commands.
-- `GET /api/stream` - SSE stream; emits snapshot/session/command events.
+- `GET /api/snapshot/summary` - lightweight thread-list snapshot.
+- `GET /api/stream` - SSE stream; always emits summary snapshots/session updates.
 - `POST /api/register`
 - `POST /api/unregister`
 - `POST /api/presence`
@@ -89,8 +88,8 @@ Core routes:
 - `POST /api/send`
 - `POST /api/control`
 - `GET /api/poll`
-- `GET /api/browse` and `GET /api/v2/browse`
-- `POST /api/send-attachment` and `POST /api/v2/send-attachment`
+- `GET /api/browse`
+- `POST /api/send-attachment`
 - `POST /api/agents/create`
 
 ## Agent Creation
@@ -111,8 +110,6 @@ From repo root:
 
 ```bash
 node --check hub-server.mjs
-node --check omp-hub-server.mjs
-node --check pi-hub-server.mjs
 ```
 
 Flutter:

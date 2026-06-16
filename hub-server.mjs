@@ -52,16 +52,9 @@ function normalizeAgentCreationConfig(value = {}) {
       .filter(([cli, command]) => typeof cli === "string" && cli.trim() && typeof command === "string" && command.trim())
       .map(([cli, command]) => [cli.trim(), command.trim()])
   );
-  if (typeof source.ompCommand === "string" && source.ompCommand.trim()) commands.omp = source.ompCommand.trim();
-  if (typeof source.piCommand === "string" && source.piCommand.trim()) commands.pi = source.piCommand.trim();
-  const legacyDefaultCli = typeof source.cliCommand === "string" && source.cliCommand.trim()
-    ? source.cliCommand.trim()
-    : "";
   let defaultCli = typeof source.defaultCli === "string" && source.defaultCli.trim()
     ? source.defaultCli.trim()
-    : commands[legacyDefaultCli]
-      ? legacyDefaultCli
-      : DEFAULT_CONFIG.agentCreation.defaultCli;
+    : DEFAULT_CONFIG.agentCreation.defaultCli;
   if (!commands[defaultCli]) defaultCli = Object.keys(commands)[0] || DEFAULT_CONFIG.agentCreation.defaultCli;
   return {
     commands,
@@ -412,29 +405,6 @@ function isSessionVisible(session) {
   return Boolean(session && session.online !== false && session.status !== "offline");
 }
 
-function snapshot() {
-  expireCommands();
-  return {
-    server: {
-      pid: process.pid,
-      startedAt,
-      host: config.host,
-      port: Number(config.port),
-      time: nowIso(),
-      version: SERVER_VERSION,
-      schemaVersion: 2,
-      availableClis: detectAvailableClis(),
-      staleThresholdMs: Number(config.staleThresholdMs),
-      commandTimeoutMs: Number(config.commandTimeoutMs),
-      capabilities: serverCapabilities(),
-    },
-    sessions: Array.from(sessions.values())
-      .filter(isSessionVisible)
-      .sort((a, b) => String(a.cwd).localeCompare(String(b.cwd)) || String(a.name || a.id).localeCompare(String(b.name || b.id)))
-      .map(publicSession),
-    commands: publicCommands(),
-  };
-}
 
 function summarySnapshot() {
   expireCommands();
@@ -526,8 +496,7 @@ function isAuthorized(req, url) {
   return config.token && getToken(req) === config.token;
 }
 
-function streamPacketForWatcher(packet, options = {}) {
-  if (!options.summary) return packet;
+function streamPacketForWatcher(packet) {
   const next = { ...packet };
   if (next.snapshot) next.snapshot = summarySnapshot();
   if (next.session) next.session = publicSessionSummary(next.session);
@@ -837,49 +806,6 @@ function applyCommandResult(event) {
   return markCommandStatus(command, applied ? "applied" : "failed", { error, reason: applied ? "applied" : "failed" });
 }
 
-function mapLegacyEventType(type) {
-  const map = {
-    history: "session.history",
-    presence: "session.presence",
-    register: "session.registered",
-    unregister: "session.unregistered",
-    agent_start: "session.agent_start",
-    agent_end: "session.agent_end",
-    message_update: "session.message_update",
-    message_end: "session.message_end",
-    tool_start: "session.tool_start",
-    tool_update: "session.tool_update",
-    tool_end: "session.tool_end",
-    input: "session.input",
-    command_received: "command.result",
-    command_queued: "command.queued",
-    model_select: "session.model_select",
-    thinking_level_select: "session.thinking_level_select",
-  };
-  return map[type] || type || "session.event";
-}
-
-function unmapV2EventType(type) {
-  const map = {
-    "session.history": "history",
-    "session.presence": "presence",
-    "session.registered": "register",
-    "session.unregistered": "unregister",
-    "session.agent_start": "agent_start",
-    "session.agent_end": "agent_end",
-    "session.message_update": "message_update",
-    "session.message_end": "message_end",
-    "session.tool_start": "tool_start",
-    "session.tool_update": "tool_update",
-    "session.tool_end": "tool_end",
-    "session.input": "input",
-    "command.result": "command_received",
-    "command.queued": "command_queued",
-    "session.model_select": "model_select",
-    "session.thinking_level_select": "thinking_level_select",
-  };
-  return map[type] || type;
-}
 
 function inferSeverity(type, payload = {}) {
   if (payload.severity) return String(payload.severity);
@@ -890,31 +816,27 @@ function inferSeverity(type, payload = {}) {
 
 function normalizeEvent(input = {}, fallbackSessionId, fallbackType = "session.event") {
   const source = input && typeof input === "object" ? input : {};
-  const schemaVersion = Number(source.schemaVersion) === 2 ? 2 : 1;
-  const payload = schemaVersion === 2 && source.payload && typeof source.payload === "object"
-    ? { ...source.payload }
-    : { ...source };
-  for (const key of ["schemaVersion", "id", "seq", "actor", "severity", "attention", "payload", "type", "sessionId"]) delete payload[key];
-  const incomingType = String(source.type || fallbackType);
-  const type = schemaVersion === 2 ? incomingType : mapLegacyEventType(incomingType);
-  const legacyType = schemaVersion === 2 ? unmapV2EventType(incomingType) : incomingType;
+  if (Number(source.schemaVersion) !== 2) throw new Error("schemaVersion 2 event required");
+  const payload = source.payload && typeof source.payload === "object" ? { ...source.payload } : {};
+  const type = String(source.type || fallbackType);
   const sessionId = source.sessionId || fallbackSessionId;
-  const severitySource = schemaVersion === 2 ? { ...payload, severity: source.severity, attention: source.attention } : source;
-  const normalized = {
+  return {
     schemaVersion: 2,
     id: typeof source.id === "string" && source.id ? source.id : `evt_${crypto.randomUUID()}`,
     seq: ++normalizedEventSeq,
     type,
-    legacyType,
     sessionId: typeof sessionId === "string" ? sessionId : undefined,
     actor: source.actor && typeof source.actor === "object" ? source.actor : { kind: sessionId ? "agent" : "server", id: sessionId || "hub-dashboard" },
     timestamp: Number.isFinite(Number(source.timestamp)) ? Number(source.timestamp) : Date.now(),
-    severity: inferSeverity(type, severitySource),
+    severity: inferSeverity(type, { ...payload, severity: source.severity, attention: source.attention }),
     attention: Boolean(source.attention || payload.tool?.isError || payload.error),
     payload,
     raw: source,
   };
-  return normalized;
+}
+
+function createEvent(type, payload = {}, sessionId) {
+  return normalizeEvent({ schemaVersion: 2, type, sessionId, payload }, sessionId, type);
 }
 
 function touchSession(session, patch = {}) {
@@ -981,7 +903,7 @@ function recordOutgoingUserMessage(session, command, text, extraMetadata = {}) {
     },
   });
   upsertHistoryItem(session, item);
-  const event = normalizeEvent({ type: "input", item }, session.id, "input");
+  const event = createEvent("session.input", { item }, session.id);
   session.lastEvent = event;
   broadcast({ type: "session_updated", reason: "input", session: publicSession(session), event });
   return item;
@@ -990,73 +912,68 @@ function recordOutgoingUserMessage(session, command, text, extraMetadata = {}) {
 function handleHubEvent(session, event) {
   session.lastEvent = event;
   if (!event || typeof event !== "object") return;
+  const payload = event.payload || {};
 
   switch (event.type) {
-    case "history": {
-      const entries = Array.isArray(event.entries) ? event.entries.map(sanitizeItem) : [];
+    case "session.history": {
+      const entries = Array.isArray(payload.entries) ? payload.entries.map(sanitizeItem) : [];
       session.history = entries.slice(-Number(config.historyLimit));
       break;
     }
-    case "presence": {
-      if (typeof event.status === "string") session.status = event.status;
-      if (typeof event.model === "string") session.model = event.model;
-      if (event.contextUsage !== undefined) session.contextUsage = event.contextUsage;
+    case "session.presence": {
+      if (typeof payload.status === "string") session.status = payload.status;
+      if (typeof payload.model === "string") session.model = payload.model;
+      if (payload.contextUsage !== undefined) session.contextUsage = payload.contextUsage;
       break;
     }
-    case "agent_start": {
+    case "session.agent_start": {
       session.status = "thinking";
       break;
     }
-    case "agent_end": {
+    case "session.agent_end": {
       session.status = "idle";
       session.liveMessage = undefined;
       session.tools.clear();
       break;
     }
-    case "message_update": {
-      if (event.item) session.liveMessage = sanitizeItem({ ...event.item, streaming: true });
+    case "session.message_update": {
+      if (payload.item) session.liveMessage = sanitizeItem({ ...payload.item, streaming: true });
       break;
     }
-    case "message_end": {
-      if (event.item) {
-        upsertHistoryItem(session, event.item);
-      }
+    case "session.message_end": {
+      if (payload.item) upsertHistoryItem(session, payload.item);
       session.liveMessage = undefined;
       break;
     }
-    case "tool_start": {
-      if (event.tool) session.tools.set(event.tool.id, { ...event.tool, status: "running" });
-      session.status = event.tool?.name ? `tool:${event.tool.name}` : "tool";
+    case "session.tool_start": {
+      if (payload.tool) session.tools.set(payload.tool.id, { ...payload.tool, status: "running" });
+      session.status = payload.tool?.name ? `tool:${payload.tool.name}` : "tool";
       break;
     }
-    case "tool_update": {
-      if (event.tool?.id) {
-        const prev = session.tools.get(event.tool.id) || { id: event.tool.id };
-        session.tools.set(event.tool.id, { ...prev, ...event.tool, status: "running" });
+    case "session.tool_update": {
+      if (payload.tool?.id) {
+        const prev = session.tools.get(payload.tool.id) || { id: payload.tool.id };
+        session.tools.set(payload.tool.id, { ...prev, ...payload.tool, status: "running" });
       }
       break;
     }
-    case "tool_end": {
-      if (event.tool?.id) {
-        const prev = session.tools.get(event.tool.id) || { id: event.tool.id };
-        session.tools.set(event.tool.id, { ...prev, ...event.tool, status: event.tool.isError ? "error" : "done" });
+    case "session.tool_end": {
+      if (payload.tool?.id) {
+        const prev = session.tools.get(payload.tool.id) || { id: payload.tool.id };
+        session.tools.set(payload.tool.id, { ...prev, ...payload.tool, status: payload.tool.isError ? "error" : "done" });
       }
       break;
     }
-    case "input": {
-      if (event.item) {
-        upsertHistoryItem(session, event.item);
-      }
+    case "session.input": {
+      if (payload.item) upsertHistoryItem(session, payload.item);
       break;
     }
-    case "command_received":
-    case "model_select":
-    case "thinking_level_select":
+    case "command.result":
+    case "session.model_select":
+    case "session.thinking_level_select":
       break;
     default: {
-      if (event.item) {
-        upsertHistoryItem(session, event.item);
-      }
+      if (payload.item) upsertHistoryItem(session, payload.item);
       break;
     }
   }
@@ -1065,7 +982,6 @@ function handleHubEvent(session, event) {
 function applyEvent(event) {
   if (!event?.sessionId) return undefined;
   const session = touchSession(getOrCreateSession(event.sessionId));
-  const legacyEvent = { ...event.payload, type: event.legacyType || event.type };
   if (event.type === "session.registered") {
     const info = event.payload.session && typeof event.payload.session === "object" ? event.payload.session : event.payload;
     Object.assign(session, {
@@ -1087,9 +1003,9 @@ function applyEvent(event) {
     session.lastSeen = Date.now();
     session.tools.clear();
   } else {
-    handleHubEvent(session, legacyEvent);
+    handleHubEvent(session, event);
   }
-  if (event.type === "command.result" || event.legacyType === "command_received") {
+  if (event.type === "command.result") {
     applyCommandResult(event);
   }
   session.lastEvent = event;
@@ -1350,10 +1266,6 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && url.pathname === "/api/snapshot") {
-      sendJson(req, res, 200, snapshot());
-      return;
-    }
 
     if (req.method === "GET" && url.pathname === "/api/snapshot/summary") {
       sendJson(req, res, 200, summarySnapshot());
@@ -1391,7 +1303,6 @@ const server = http.createServer(async (req, res) => {
         try { oldest.end(); } catch {}
         watchers.delete(oldest);
       }
-      const summary = url.searchParams.get("summary") === "1" || url.searchParams.get("summary") === "true";
       req.socket?.setNoDelay?.(true);
       res.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
@@ -1399,13 +1310,12 @@ const server = http.createServer(async (req, res) => {
         connection: "keep-alive",
         ...corsHeaders(req),
       });
-      const initialSnapshot = summary ? summarySnapshot() : snapshot();
-      res.write(`data: ${JSON.stringify({ seq: ++eventSeq, type: "snapshot", timestamp: Date.now(), snapshot: initialSnapshot })}\n\n`);
+      res.write(`data: ${JSON.stringify({ seq: ++eventSeq, type: "snapshot", timestamp: Date.now(), snapshot: summarySnapshot() })}\n\n`);
       const heartbeat = setInterval(() => {
         try { res.write(`: ping ${Date.now()}\n\n`); }
         catch { clearInterval(heartbeat); watchers.delete(res); }
       }, 15000);
-      watchers.set(res, { summary });
+      watchers.set(res, true);
       req.on("close", () => {
         clearInterval(heartbeat);
         watchers.delete(res);
@@ -1417,7 +1327,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const info = body.session || body;
       if (!info?.id || typeof info.id !== "string") throw new Error("session.id required");
-      const event = normalizeEvent({ ...info, type: "register" }, info.id, "register");
+      const event = createEvent("session.registered", info, info.id);
       const session = applyEvent(event);
       broadcast({ type: "session_updated", reason: "register", session: publicSession(session), event });
       sendJson(req, res, 200, { ok: true, session: publicSession(session) });
@@ -1436,16 +1346,15 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const sessionId = requireSessionId(body);
       const current = getOrCreateSession(sessionId);
-      const event = normalizeEvent({
+      const event = createEvent("session.presence", {
         ...body,
-        type: "presence",
         cwd: body.cwd ?? current.cwd,
         model: body.model ?? current.model,
         status: body.status ?? current.status,
         availableModels: Array.isArray(body.availableModels) ? body.availableModels : current.availableModels,
         slashCommands: Array.isArray(body.slashCommands) ? body.slashCommands : current.slashCommands,
         todos: Array.isArray(body.todos) ? body.todos : current.todos,
-      }, sessionId, "presence");
+      }, sessionId);
       const session = applyEvent(event);
       if (typeof body.name !== "undefined") session.name = body.name;
       if (typeof event.payload.cwd !== "undefined") session.cwd = event.payload.cwd;
@@ -1462,7 +1371,7 @@ const server = http.createServer(async (req, res) => {
       const sessionId = requireSessionId(body);
       const event = normalizeEvent(body.event, sessionId);
       const session = applyEvent(event);
-      broadcast({ type: "session_updated", reason: event.legacyType || event.type || "event", session: publicSession(session), event });
+      broadcast({ type: "session_updated", reason: event.type || "event", session: publicSession(session), event });
       sendJson(req, res, 200, { ok: true });
       return;
     }
@@ -1547,7 +1456,7 @@ const server = http.createServer(async (req, res) => {
       const payload = typeof body.modelId === "string" ? { modelId: body.modelId } : {};
       const command = createCommand(sessionId, action, payload);
       const session = getOrCreateSession(sessionId);
-      const event = normalizeEvent({ type: "command_queued", command: { id: command.id, type: command.type, timestamp: command.createdAt } }, sessionId, "command_queued");
+      const event = createEvent("command.queued", { command: { id: command.id, type: command.type, timestamp: command.createdAt } }, sessionId);
       session.lastEvent = event;
       broadcast({ type: "command_queued", sessionId, command: publicCommand(command) });
       sendJson(req, res, 200, { ok: true, commandId: command.id });
@@ -1578,7 +1487,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "GET" && (url.pathname === "/api/browse" || url.pathname === "/api/v2/browse")) {
+    if (req.method === "GET" && url.pathname === "/api/browse") {
       const rawPath = url.searchParams.get("path") || "";
       const dirPath = path.resolve(rawPath || os.homedir());
       const showHidden = queryFlag(url.searchParams.get("showHidden"));
@@ -1619,7 +1528,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && (url.pathname === "/api/send-attachment" || url.pathname === "/api/v2/send-attachment")) {
+    if (req.method === "POST" && url.pathname === "/api/send-attachment") {
       const body = await readBody(req);
       const sessionId = requireSessionId(body);
       const text = String(body.text || "").trim();

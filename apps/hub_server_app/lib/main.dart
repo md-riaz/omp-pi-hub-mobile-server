@@ -107,7 +107,6 @@ class HubHomePage extends StatefulWidget {
 
 class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   static const _prefServerUrl = 'hub_server_url';
-  static const _prefToken = 'hub_token';
   static const _prefRecentConnections = 'hub_recent_connections';
   static const _prefPendingMessages = 'hub_pending_user_messages';
   static const _prefRecentSessionModels = 'hub_recent_session_models';
@@ -166,15 +165,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   Future<void> _loadSavedConnection() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString(_prefServerUrl);
-    final legacyToken = prefs.getString(_prefToken);
-    var savedToken = await _secureStorage.read(key: _secureTokenKey);
-    if ((savedToken == null || savedToken.isEmpty) &&
-        legacyToken != null &&
-        legacyToken.isNotEmpty) {
-      savedToken = legacyToken;
-      await _secureStorage.write(key: _secureTokenKey, value: legacyToken);
-      await prefs.remove(_prefToken);
-    }
+    final savedToken = await _secureStorage.read(key: _secureTokenKey);
     if (savedUrl != null && savedUrl.isNotEmpty) {
       _serverController.text = savedUrl;
     }
@@ -220,7 +211,6 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   Future<void> _saveConnection() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefServerUrl, _serverController.text);
-    await prefs.remove(_prefToken);
     // Update recent connections
     final url = _serverController.text.trim();
     final token = _tokenController.text.trim();
@@ -279,7 +269,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         ].take(5).toList();
       }
     } catch (_) {
-      // Ignore corrupt legacy entries.
+      // Ignore corrupt entries.
     }
   }
 
@@ -325,7 +315,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
           if (message.text.trim().isNotEmpty) _pendingMessages.add(message);
         }
       } catch (_) {
-        // Ignore corrupt legacy entries.
+        // Ignore corrupt entries.
       }
     }
   }

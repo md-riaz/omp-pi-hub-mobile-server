@@ -1,14 +1,13 @@
 # OMP/Pi Hub v2 Protocol Notes
 
-The v2 protocol is additive. The unified hub uses canonical `/api/...` routes while mobile mission-control surfaces use event envelopes and richer snapshot fields.
+The hub uses canonical `/api/...` routes with v2 event envelopes and messenger-style lazy thread loading. Legacy full snapshots, v1 event payloads, and `/api/v2/...` aliases are not supported.
 
-## Compatibility
+## Protocol Requirements
 
 - Auth uses `Authorization: Bearer <token>`. Query-string tokens are not supported.
-- Canonical routes keep their response shape: `/api/register`, `/api/presence`, `/api/event`, `/api/stream`, `/api/snapshot`, `/api/send`, `/api/control`, `/api/poll`.
-- New fields are optional for older clients. Unknown fields should be ignored.
-- Server normalizes v1 payloads into internal v2 events before applying state changes.
-- `GET /api/browse` and `POST /api/send-attachment` have `/api/v2/...` aliases for compatibility.
+- Events submitted to `POST /api/event` must use `schemaVersion: 2` envelopes.
+- Initial app state uses `GET /api/snapshot/summary`; full `/api/snapshot` is not served.
+- `GET /api/stream` always emits summary snapshots and summary session updates.
 
 ## Event Envelope
 
@@ -31,7 +30,7 @@ Fields:
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `schemaVersion` | yes | `2` for v2 envelopes. Missing or older payloads are treated as v1. |
+| `schemaVersion` | yes | Must be `2`. |
 | `id` | server | Server assigns `evt_<uuid>` when client omits it. |
 | `seq` | server | Monotonic server sequence. |
 | `type` | yes | Dot names are preferred for v2, e.g. `session.tool_end`. |
@@ -42,9 +41,9 @@ Fields:
 | `attention` | optional | Whether event should create/raise operator attention. |
 | `payload` | optional | Event-specific body. |
 
-## Snapshot Shape
+## Summary Snapshot Shape
 
-`GET /api/snapshot` keeps the v1 `server` and `sessions` shape. v2 adds optional mission-control fields under existing objects.
+`GET /api/snapshot/summary` returns server metadata, thread summaries, and no full history.
 
 ```json
 {
@@ -77,9 +76,9 @@ Fields:
 }
 ```
 
-## Summary Snapshot and Lazy Thread Detail
+## Lazy Thread Detail
 
-Mobile clients should use `GET /api/snapshot/summary` and `GET /api/stream?summary=1` for fast thread-list startup. Summary sessions include only thread-list fields: `id`, `name`, `cwd`, `model`, `pid`, `startedAt`, `lastSeen`, `status`, `online`, `contextUsage`, `health`, and `detailLoaded: false`.
+Summary sessions include only thread-list fields: `id`, `name`, `cwd`, `model`, `pid`, `startedAt`, `lastSeen`, `status`, `online`, `contextUsage`, `health`, and `detailLoaded: false`.
 
 Open a thread with `GET /api/sessions/:sessionId?limit=80`. The response returns the full session metadata plus the most recent history window and paging metadata:
 
@@ -145,7 +144,7 @@ Commands are queued by mobile/operator routes and delivered by `/api/poll`.
 
 Statuses: `queued`, `delivered`, `applied`, `failed`, `expired`, `cancelled`.
 
-Current v1 command payloads keep `id`, `type`, `text`, `modelId`, and `timestamp` for extension compatibility.
+Command payloads use current queue fields: `id`, `type`, `text`, `modelId`, and `timestamp`.
 
 ## Agent Creation
 
@@ -165,7 +164,7 @@ Server resolves `cwd`, requires it to be an existing directory on the hub host, 
 
 ## CLI Availability
 
-`/api/health` and `snapshot().server` include `availableClis`, derived by checking configured command binaries in `config.agentCreation.commands`. The mobile app uses this list to show a CLI picker only when more than one CLI is available.
+`/api/health` and `/api/snapshot/summary` include `availableClis`, derived by checking configured command binaries in `config.agentCreation.commands`. The mobile app uses this list to show a CLI picker only when more than one CLI is available.
 
 ## Browse Remote Directories
 

@@ -7,6 +7,5 @@ export default function piHubExtension(pi: ExtensionAPI) {
 		displayName: "Pi Hub",
 		tuiName: "Pi TUI",
 		uiStatusKey: "pi-hub",
-		cliCommand: "pi",
 	});
 }

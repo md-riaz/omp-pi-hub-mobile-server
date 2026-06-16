@@ -32,12 +32,6 @@ omp sessions                  pi sessions
         apps/hub_server_app (Hub Server App)
 ```
 
-Compatibility shims remain:
-
-```text
-omp-hub-server.mjs -> hub-server.mjs
-pi-hub-server.mjs  -> hub-server.mjs
-```
 
 ## Requirements
 
@@ -201,15 +195,15 @@ Health check:
 curl -H "Authorization: Bearer <token>" "http://127.0.0.1:18000/api/health"
 ```
 
-`/api/health` and `/api/snapshot` include `availableClis`, which the app uses to decide whether to show the CLI picker.
+`/api/health` and `/api/snapshot/summary` include `availableClis`, which the app uses to decide whether to show the CLI picker.
 
 ## API Summary
 
 All API routes except `/` require `Authorization: Bearer <token>`. Query-string tokens are not supported.
 
 - `GET /api/health` - server status, local addresses, capabilities, and available CLIs.
-- `GET /api/snapshot` - full session snapshot.
-- `GET /api/stream` - SSE snapshot/session update stream.
+- `GET /api/snapshot/summary` - lightweight thread-list snapshot.
+- `GET /api/stream` - SSE stream; always emits summary snapshots/session updates.
 - `POST /api/register` - register an agent session.
 - `POST /api/unregister` - remove a session.
 - `POST /api/presence` - update session status/model/context.
@@ -218,8 +212,8 @@ All API routes except `/` require `Authorization: Bearer <token>`. Query-string 
 - `POST /api/control` - queue `abort`, `compact`, `set_model`, or `shutdown`.
 - `GET /api/poll` - session command polling endpoint.
 - `POST /api/agents/create` - guarded agent creation.
-- `GET /api/browse` and `GET /api/v2/browse` - list remote directories with root, platform, symlink, size, timestamp, and permission metadata.
-- `POST /api/send-attachment` and `POST /api/v2/send-attachment` - send files as attachments.
+- `GET /api/browse` - list remote directories with root, platform, symlink, size, timestamp, and permission metadata.
+- `POST /api/send-attachment` - send files as attachments.
 
 ## Security Notes
 
@@ -239,8 +233,6 @@ Protect `~/.hub-dashboard/server/config.json`; it contains the bearer token.
 
 ```bash
 node --check hub-server.mjs
-node --check omp-hub-server.mjs
-node --check pi-hub-server.mjs
 cd apps/hub_server_app
 flutter analyze
 flutter test

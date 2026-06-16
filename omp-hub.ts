@@ -7,6 +7,5 @@ export default function ompHubExtension(omp: ExtensionAPI) {
 		displayName: "OMP Hub",
 		tuiName: "OMP TUI",
 		uiStatusKey: "omp-hub",
-		cliCommand: "omp",
 	});
 }

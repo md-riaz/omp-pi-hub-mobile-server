@@ -74,8 +74,9 @@ try {
   const history = await request("POST", "/api/event", {
     sessionId: "session-a",
     event: {
-      type: "history",
-      entries,
+      schemaVersion: 2,
+      type: "session.history",
+      payload: { entries },
     },
   });
   assert.equal(history.status, 200);
@@ -86,6 +87,12 @@ try {
   assert.equal(summary.json.sessions[0].history, undefined);
   assert.equal(summary.json.sessions[0].availableModels, undefined);
   assert.equal(summary.json.sessions[0].detailLoaded, false);
+
+  const fullSnapshot = await request("GET", "/api/snapshot");
+  assert.equal(fullSnapshot.status, 404);
+
+  const v2Browse = await request("GET", "/api/v2/browse");
+  assert.equal(v2Browse.status, 404);
 
   const detail = await request("GET", "/api/sessions/session-a?limit=25");
   assert.equal(detail.status, 200);
