@@ -124,6 +124,10 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   HubSnapshot? _snapshot;
   StreamSubscription<HubSnapshot>? _subscription;
   String? _detailSessionId;
+  final Map<String, HubSession> _sessionDetailCache = {};
+  final Set<String> _loadingSessionDetails = {};
+  final Set<String> _loadingOlderHistory = {};
+  final Map<String, String> _sessionDetailErrors = {};
   String _connectionState = 'Disconnected';
   String? _connectionError;
   bool _connecting = false;
@@ -415,8 +419,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   bool _hasServerUserMessage(HubSession session, _PendingUserMessage pending) {
     return session.history.any((item) {
       final commandId = item.metadata['commandId']?.toString();
-      if (pending.commandId != null && commandId == pending.commandId)
+      if (pending.commandId != null && commandId == pending.commandId) {
         return true;
+      }
       return item.kind == 'user' &&
           !item.id.startsWith('local-') &&
           item.text.trim() == pending.text.trim();
@@ -455,27 +460,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       history.add(message.toHubItem());
     }
     history.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    return HubSession(
-      id: session.id,
-      name: session.name,
-      cwd: session.cwd,
-      model: session.model,
-      pid: session.pid,
-      startedAt: session.startedAt,
-      lastSeen: session.lastSeen,
-      status: session.status,
-      online: session.online,
-      history: history,
-      liveMessage: session.liveMessage,
-      tools: session.tools,
-      contextUsage: session.contextUsage,
-      availableModels: session.availableModels,
-      slashCommands: session.slashCommands,
-      todos: session.todos,
-      lastEvent: session.lastEvent,
-      health: session.health,
-      commands: session.commands,
-    );
+    return session.copyWith(history: history);
   }
 
   String _connectionErrorHelp(Object error) {
@@ -506,6 +491,111 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
     return 'Connection failed: $message';
   }
 
+  HubSnapshot _ingestSummarySnapshot(HubSnapshot snapshot) {
+    final remembered = _rememberSnapshotSessionModels(snapshot);
+    final summaries = {
+      for (final session in remembered.sessions) session.id: session,
+    };
+    for (final entry in _sessionDetailCache.entries.toList()) {
+      final summary = summaries[entry.key];
+      if (summary == null) continue;
+      _sessionDetailCache[entry.key] = entry.value.mergeSummary(summary);
+    }
+    if (_detailSessionId != null && !summaries.containsKey(_detailSessionId)) {
+      _detailSessionId = null;
+    }
+    return _snapshotWithPendingMessages(remembered);
+  }
+
+  HubSession? _summarySession(String sessionId) {
+    return _snapshot?.sessions
+        .where((session) => session.id == sessionId)
+        .firstOrNull;
+  }
+
+  HubSession? _detailSession() {
+    final sessionId = _detailSessionId;
+    if (sessionId == null) return null;
+    final detail = _sessionDetailCache[sessionId];
+    if (detail != null) return _sessionWithPendingMessages(detail);
+    final summary = _summarySession(sessionId);
+    return summary == null ? null : _sessionWithPendingMessages(summary);
+  }
+
+  void _openDetail(String sessionId) {
+    setState(() => _detailSessionId = sessionId);
+    unawaited(_loadSessionDetail(sessionId));
+  }
+
+  Future<void> _loadSessionDetail(
+    String sessionId, {
+    bool force = false,
+  }) async {
+    if (!force && _sessionDetailCache.containsKey(sessionId)) return;
+    if (_loadingSessionDetails.contains(sessionId)) return;
+    setState(() {
+      _loadingSessionDetails.add(sessionId);
+      _sessionDetailErrors.remove(sessionId);
+    });
+    try {
+      final detail = await _client.fetchSessionDetail(sessionId);
+      if (!mounted) return;
+      setState(() {
+        final summary = _summarySession(sessionId);
+        _sessionDetailCache[sessionId] = summary == null
+            ? detail
+            : detail.mergeSummary(summary);
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _sessionDetailErrors[sessionId] = error.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingSessionDetails.remove(sessionId));
+      }
+    }
+  }
+
+  Future<void> _loadOlderHistory(String sessionId) async {
+    final detail = _sessionDetailCache[sessionId];
+    if (detail == null || !detail.hasMoreHistory) return;
+    if (_loadingOlderHistory.contains(sessionId)) return;
+    setState(() => _loadingOlderHistory.add(sessionId));
+    try {
+      final page = await _client.fetchSessionHistory(
+        sessionId,
+        before: detail.historyOffset,
+      );
+      if (!mounted) return;
+      setState(() {
+        final current = _sessionDetailCache[sessionId];
+        if (current == null) return;
+        final seen = {for (final item in page.items) item.id};
+        _sessionDetailCache[sessionId] = current.copyWith(
+          history: [
+            ...page.items,
+            for (final item in current.history)
+              if (!seen.contains(item.id)) item,
+          ],
+          historyOffset: page.offset,
+          historyTotal: page.total,
+          hasMoreHistory: page.hasMore,
+        );
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Older messages failed: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingOlderHistory.remove(sessionId));
+      }
+    }
+  }
+
   void _startStream() {
     final generation = ++_streamGeneration;
     final staleSubscription = _subscription;
@@ -516,25 +606,21 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         if (!mounted || generation != _streamGeneration) return;
         _streamRetry = 0;
         setState(() {
-          _snapshot = _snapshotWithPendingMessages(
-            _rememberSnapshotSessionModels(snapshot),
-          );
-          if (_detailSessionId != null &&
-              !snapshot.sessions.any((s) => s.id == _detailSessionId)) {
-            _detailSessionId = null;
-          }
+          _snapshot = _ingestSummarySnapshot(snapshot);
           _connectionState = 'Live';
         });
       },
       onError: (Object error) {
-        if (!mounted || _manualDisconnect || generation != _streamGeneration)
+        if (!mounted || _manualDisconnect || generation != _streamGeneration) {
           return;
+        }
         setState(() => _connectionState = 'Reconnecting...');
         _scheduleReconnect();
       },
       onDone: () {
-        if (!mounted || _manualDisconnect || generation != _streamGeneration)
+        if (!mounted || _manualDisconnect || generation != _streamGeneration) {
           return;
+        }
         setState(() => _connectionState = 'Reconnecting...');
         _scheduleReconnect();
       },
@@ -556,9 +642,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
           final snapshot = await _client.fetchSnapshot();
           if (!mounted || _manualDisconnect) return;
           setState(() {
-            _snapshot = _snapshotWithPendingMessages(
-              _rememberSnapshotSessionModels(snapshot),
-            );
+            _snapshot = _ingestSummarySnapshot(snapshot);
             _connectionState = 'Reconnected';
             _connectionError = null;
           });
@@ -596,9 +680,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       final snapshot = await _client.fetchSnapshot();
       if (!mounted) return;
       setState(() {
-        _snapshot = _snapshotWithPendingMessages(
-          _rememberSnapshotSessionModels(snapshot),
-        );
+        _snapshot = _ingestSummarySnapshot(snapshot);
         _connectionState = 'Connected';
         _connecting = false;
         _connectionError = null;
@@ -652,9 +734,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       final snapshot = await _client.fetchSnapshot();
       if (!mounted || _manualDisconnect) return;
       setState(() {
-        _snapshot = _snapshotWithPendingMessages(
-          _rememberSnapshotSessionModels(snapshot),
-        );
+        _snapshot = _ingestSummarySnapshot(snapshot);
         _streamRetry = 0;
         _connectionState = 'Live';
         _connectionError = null;
@@ -669,6 +749,13 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
     }
   }
 
+  void _clearSessionDetails() {
+    _sessionDetailCache.clear();
+    _loadingSessionDetails.clear();
+    _loadingOlderHistory.clear();
+    _sessionDetailErrors.clear();
+  }
+
   Future<void> _disconnect() async {
     _manualDisconnect = true;
     _reconnectTimer?.cancel();
@@ -681,6 +768,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         _snapshot = null;
         _detailSessionId = null;
         _connecting = false;
+        _clearSessionDetails();
         _connectionState = 'Disconnected';
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -706,6 +794,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         _snapshot = null;
         _detailSessionId = null;
         _connecting = false;
+        _clearSessionDetails();
         _connectionState = 'Disconnected';
         _connectionError = null;
       });
@@ -728,8 +817,9 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
         text,
         clientCommandId: clientCommandId,
       );
-      if (command?.id.isNotEmpty == true)
+      if (command?.id.isNotEmpty == true) {
         _attachPendingCommand(pending.id, command!.id);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sent'), duration: Duration(seconds: 1)),
@@ -799,8 +889,29 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       snapshot: _snapshot,
       detailSessionId: _detailSessionId,
       onConnect: _connect,
-      onOpenDetail: (id) => setState(() => _detailSessionId = id),
+      detailSession: _detailSession(),
+      detailLoading:
+          _detailSessionId != null &&
+          (_loadingSessionDetails.contains(_detailSessionId) ||
+              _sessionDetailCache[_detailSessionId]?.detailLoaded != true),
+      detailLoadingOlder:
+          _detailSessionId != null &&
+          _loadingOlderHistory.contains(_detailSessionId),
+      detailError: _detailSessionId == null
+          ? null
+          : _sessionDetailErrors[_detailSessionId],
+      onOpenDetail: _openDetail,
       onCloseDetail: () => setState(() => _detailSessionId = null),
+      onLoadOlderHistory: () {
+        if (_detailSessionId != null) {
+          unawaited(_loadOlderHistory(_detailSessionId!));
+        }
+      },
+      onRetryDetail: () {
+        if (_detailSessionId != null) {
+          unawaited(_loadSessionDetail(_detailSessionId!, force: true));
+        }
+      },
       onSend: (text) {
         if (_detailSessionId != null) _sendMessage(_detailSessionId!, text);
       },

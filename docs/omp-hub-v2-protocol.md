@@ -67,13 +67,35 @@ Fields:
       "agentCreation": true,
       "browse": true,
       "attachments": true,
-      "collaboration": true
+      "collaboration": true,
+      "summarySnapshot": true,
+      "sessionDetail": true
     }
   },
   "sessions": [],
   "commands": []
 }
 ```
+
+## Summary Snapshot and Lazy Thread Detail
+
+Mobile clients should use `GET /api/snapshot/summary` and `GET /api/stream?summary=1` for fast thread-list startup. Summary sessions include only thread-list fields: `id`, `name`, `cwd`, `model`, `pid`, `startedAt`, `lastSeen`, `status`, `online`, `contextUsage`, `health`, and `detailLoaded: false`.
+
+Open a thread with `GET /api/sessions/:sessionId?limit=80`. The response returns the full session metadata plus the most recent history window and paging metadata:
+
+```json
+{
+  "ok": true,
+  "session": {
+    "id": "session-001",
+    "history": [],
+    "historyPage": { "offset": 420, "limit": 80, "total": 500, "hasMore": true },
+    "detailLoaded": true
+  }
+}
+```
+
+Pull older messages with `GET /api/sessions/:sessionId/history?before=<offset>&limit=80`. This returns `{ ok, items, offset, limit, total, hasMore }`. This keeps the app behavior messenger-like: list first, recent thread messages on open, older messages only when scrolling upward.
 
 Push devices/notifications are not part of the current canonical server surface.
 

@@ -124,6 +124,8 @@ class HubServerCapabilities {
     required this.collaboration,
     this.browse = false,
     this.attachments = false,
+    this.summarySnapshot = false,
+    this.sessionDetail = false,
   });
 
   final bool eventEnvelope;
@@ -133,6 +135,8 @@ class HubServerCapabilities {
   final bool collaboration;
   final bool browse;
   final bool attachments;
+  final bool summarySnapshot;
+  final bool sessionDetail;
 
   factory HubServerCapabilities.empty() => HubServerCapabilities(
     eventEnvelope: false,
@@ -142,6 +146,8 @@ class HubServerCapabilities {
     collaboration: false,
     browse: false,
     attachments: false,
+    summarySnapshot: false,
+    sessionDetail: false,
   );
 
   factory HubServerCapabilities.fromJson(Map<String, dynamic> json) {
@@ -153,6 +159,8 @@ class HubServerCapabilities {
       collaboration: _asBool(json['collaboration']),
       browse: _asBool(json['browse']),
       attachments: _asBool(json['attachments']),
+      summarySnapshot: _asBool(json['summarySnapshot']),
+      sessionDetail: _asBool(json['sessionDetail']),
     );
   }
 }
@@ -178,6 +186,10 @@ class HubSession {
     this.lastEvent = const {},
     this.health,
     this.commands = const [],
+    this.detailLoaded = true,
+    this.historyOffset = 0,
+    this.historyTotal,
+    this.hasMoreHistory = false,
   });
 
   final String id;
@@ -199,6 +211,10 @@ class HubSession {
   final Map<String, dynamic> lastEvent;
   final HubHealth? health;
   final List<HubCommand> commands;
+  final bool detailLoaded;
+  final int historyOffset;
+  final int? historyTotal;
+  final bool hasMoreHistory;
 
   String get displayName {
     final trimmedName = name?.trim();
@@ -225,6 +241,7 @@ class HubSession {
   }
 
   factory HubSession.fromJson(Map<String, dynamic> json) {
+    final historyPage = _asMap(json['historyPage']);
     return HubSession(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString(),
@@ -249,32 +266,120 @@ class HubSession {
       lastEvent: _asMap(json['lastEvent']),
       health: _optionalMap(json['health'], HubHealth.fromJson),
       commands: _mapList(json['commands']).map(HubCommand.fromJson).toList(),
+      detailLoaded: _asBool(
+        json['detailLoaded'],
+        defaultValue: json['detailLoaded'] == null,
+      ),
+      historyOffset: _asInt(historyPage['offset']) ?? 0,
+      historyTotal: _asInt(historyPage['total']),
+      hasMoreHistory: _asBool(historyPage['hasMore']),
     );
   }
 
   HubSession withActivity({List<HubCommand>? commands}) {
+    return copyWith(commands: commands ?? this.commands);
+  }
+
+  HubSession copyWith({
+    String? name,
+    String? cwd,
+    String? model,
+    int? pid,
+    int? startedAt,
+    int? lastSeen,
+    String? status,
+    bool? online,
+    List<HubItem>? history,
+    HubItem? liveMessage,
+    bool clearLiveMessage = false,
+    List<HubTool>? tools,
+    ContextUsage? contextUsage,
+    List<HubModel>? availableModels,
+    List<HubSlashCommand>? slashCommands,
+    List<HubTodoItem>? todos,
+    Map<String, dynamic>? lastEvent,
+    HubHealth? health,
+    List<HubCommand>? commands,
+    bool? detailLoaded,
+    int? historyOffset,
+    int? historyTotal,
+    bool? hasMoreHistory,
+  }) {
     return HubSession(
       id: id,
-      name: name,
-      cwd: cwd,
-      model: model,
-      pid: pid,
-      startedAt: startedAt,
-      lastSeen: lastSeen,
-      status: status,
-      online: online,
-      history: history,
-      liveMessage: liveMessage,
-      tools: tools,
-      contextUsage: contextUsage,
-      availableModels: availableModels,
-      slashCommands: slashCommands,
-      todos: todos,
-      lastEvent: lastEvent,
-      health: health,
+      name: name ?? this.name,
+      cwd: cwd ?? this.cwd,
+      model: model ?? this.model,
+      pid: pid ?? this.pid,
+      startedAt: startedAt ?? this.startedAt,
+      lastSeen: lastSeen ?? this.lastSeen,
+      status: status ?? this.status,
+      online: online ?? this.online,
+      history: history ?? this.history,
+      liveMessage: clearLiveMessage ? null : liveMessage ?? this.liveMessage,
+      tools: tools ?? this.tools,
+      contextUsage: contextUsage ?? this.contextUsage,
+      availableModels: availableModels ?? this.availableModels,
+      slashCommands: slashCommands ?? this.slashCommands,
+      todos: todos ?? this.todos,
+      lastEvent: lastEvent ?? this.lastEvent,
+      health: health ?? this.health,
       commands: commands ?? this.commands,
+      detailLoaded: detailLoaded ?? this.detailLoaded,
+      historyOffset: historyOffset ?? this.historyOffset,
+      historyTotal: historyTotal ?? this.historyTotal,
+      hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
     );
   }
+
+  HubSession mergeSummary(HubSession summary) {
+    final summaryAddsActivity =
+        summary.history.isNotEmpty || summary.liveMessage != null;
+    return copyWith(
+      name: summary.name,
+      cwd: summary.cwd,
+      model: summary.model,
+      pid: summary.pid,
+      startedAt: summary.startedAt,
+      lastSeen: summary.lastSeen,
+      status: summary.status,
+      online: summary.online,
+      history: summary.history.isEmpty
+          ? history
+          : _mergeHistoryItems(history, summary.history),
+      liveMessage: summary.liveMessage,
+      clearLiveMessage: summaryAddsActivity && summary.liveMessage == null,
+      contextUsage: summary.contextUsage,
+      health: summary.health,
+      commands: summary.commands.isEmpty ? commands : summary.commands,
+    );
+  }
+}
+
+List<HubItem> _mergeHistoryItems(
+  List<HubItem> current,
+  List<HubItem> incoming,
+) {
+  final next = [...current];
+  for (final item in incoming) {
+    final commandId = item.metadata['commandId']?.toString();
+    var index = commandId == null || commandId.isEmpty
+        ? -1
+        : next.indexWhere(
+            (existing) =>
+                existing.metadata['commandId']?.toString() == commandId,
+          );
+    if (index < 0) {
+      index = next.indexWhere((existing) => existing.id == item.id);
+    }
+    if (index >= 0) {
+      next[index] = item;
+    } else {
+      next.add(item);
+    }
+  }
+  next.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  return next;
 }
 
 class HubTodoItem {
@@ -573,12 +678,12 @@ double? _asDouble(Object? value) {
   return null;
 }
 
-bool _asBool(Object? value) {
+bool _asBool(Object? value, {bool defaultValue = false}) {
   if (value is bool) return value;
   if (value is num) return value != 0;
   if (value is String) {
     final normalized = value.toLowerCase();
     return normalized == 'true' || normalized == '1' || normalized == 'yes';
   }
-  return false;
+  return defaultValue;
 }

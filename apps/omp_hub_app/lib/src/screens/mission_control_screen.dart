@@ -15,9 +15,15 @@ class MissionControlScreen extends StatefulWidget {
   final HubSnapshot? snapshot;
   final String? selectedSessionId;
   final String? detailSessionId;
+  final HubSession? detailSession;
+  final bool detailLoading;
+  final bool detailLoadingOlder;
+  final String? detailError;
   final VoidCallback onConnect;
   final ValueChanged<String> onOpenDetail;
   final VoidCallback onCloseDetail;
+  final VoidCallback onLoadOlderHistory;
+  final VoidCallback onRetryDetail;
   final ValueChanged<String> onSend;
   final VoidCallback? onAbort;
   final VoidCallback? onCompact;
@@ -43,9 +49,15 @@ class MissionControlScreen extends StatefulWidget {
     this.snapshot,
     this.selectedSessionId,
     this.detailSessionId,
+    this.detailSession,
+    this.detailLoading = false,
+    this.detailLoadingOlder = false,
+    this.detailError,
     required this.onConnect,
     required this.onOpenDetail,
     required this.onCloseDetail,
+    required this.onLoadOlderHistory,
+    required this.onRetryDetail,
     required this.onSend,
     this.onAbort,
     this.onCompact,
@@ -81,17 +93,19 @@ class _MissionControlScreenState extends State<MissionControlScreen> {
       );
     }
 
-    // Detail selected: show session detail
+    // Detail selected: show cached thread immediately, then hydrate like a messenger.
     if (widget.detailSessionId != null) {
-      final session = widget.snapshot?.sessions.firstWhere(
-        (s) => s.id == widget.detailSessionId,
-        orElse: () => widget.snapshot!.sessions.first,
-      );
+      final session = widget.detailSession;
       if (session != null) {
         return SessionDetailScreen(
           client: widget.client,
           session: session,
           availableModels: session.availableModels,
+          loadingInitial: widget.detailLoading && !session.detailLoaded,
+          loadingOlder: widget.detailLoadingOlder,
+          loadError: widget.detailError,
+          onLoadOlder: widget.onLoadOlderHistory,
+          onRetryLoad: widget.onRetryDetail,
           onSend: widget.onSend,
           onAbort: widget.onAbort,
           onCompact: widget.onCompact,
@@ -104,6 +118,11 @@ class _MissionControlScreenState extends State<MissionControlScreen> {
           onReconnect: widget.onConnect,
         );
       }
+      return _DetailLoadingShell(
+        error: widget.detailError,
+        onBack: widget.onCloseDetail,
+        onRetry: widget.onRetryDetail,
+      );
     }
 
     // Default: session list
@@ -118,6 +137,43 @@ class _MissionControlScreenState extends State<MissionControlScreen> {
       connectionState: widget.connectionState,
       connected: widget.connected,
       onReconnect: widget.onConnect,
+    );
+  }
+}
+
+class _DetailLoadingShell extends StatelessWidget {
+  const _DetailLoadingShell({
+    required this.error,
+    required this.onBack,
+    required this.onRetry,
+  });
+
+  final String? error;
+  final VoidCallback onBack;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: onBack,
+        ),
+        title: const Text('Loading thread'),
+      ),
+      body: Center(
+        child: error == null
+            ? const CircularProgressIndicator()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton(onPressed: onRetry, child: const Text('Retry')),
+                ],
+              ),
+      ),
     );
   }
 }

@@ -126,12 +126,25 @@ class HubClient {
   }
 
   Future<HubSnapshot> fetchSnapshot() async {
+    return _fetchSnapshotPath(
+      '/api/snapshot/summary',
+      fallbackPath: '/api/snapshot',
+    );
+  }
+
+  Future<HubSnapshot> _fetchSnapshotPath(
+    String path, {
+    String? fallbackPath,
+  }) async {
     final client = _newHttpClient();
     try {
-      final request = await client.getUrl(_uri('/api/snapshot'));
+      final request = await client.getUrl(_uri(path));
       _authorize(request);
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode == 404 && fallbackPath != null) {
+        return _fetchSnapshotPath(fallbackPath);
+      }
       if (response.statusCode != 200) {
         throw Exception('${response.statusCode}: $body');
       }
@@ -143,10 +156,61 @@ class HubClient {
     }
   }
 
+  Future<HubSession> fetchSessionDetail(
+    String sessionId, {
+    int limit = 80,
+  }) async {
+    final client = _newHttpClient();
+    try {
+      final request = await client.getUrl(
+        _uri('/api/sessions/${Uri.encodeComponent(sessionId)}', {
+          'limit': '$limit',
+        }),
+      );
+      _authorize(request);
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode != 200) {
+        throw Exception('${response.statusCode}: $body');
+      }
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      return HubSession.fromJson(_stringKeyMap(data['session'] as Map));
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<HubHistoryPage> fetchSessionHistory(
+    String sessionId, {
+    required int before,
+    int limit = 80,
+  }) async {
+    final client = _newHttpClient();
+    try {
+      final request = await client.getUrl(
+        _uri('/api/sessions/${Uri.encodeComponent(sessionId)}/history', {
+          'before': '$before',
+          'limit': '$limit',
+        }),
+      );
+      _authorize(request);
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode != 200) {
+        throw Exception('${response.statusCode}: $body');
+      }
+      return HubHistoryPage.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Stream<HubSnapshot> streamSnapshots() async* {
     _streamClient?.close(force: true);
     _streamClient = _newHttpClient();
-    final request = await _streamClient!.getUrl(_uri('/api/stream'));
+    final request = await _streamClient!.getUrl(
+      _uri('/api/stream', {'summary': '1'}),
+    );
     _authorize(request);
     final response = await request.close();
     if (response.statusCode != 200) {
@@ -640,26 +704,7 @@ HubSession _copySession(
   List<HubItem>? history,
   HubItem? liveMessage,
 }) {
-  return HubSession(
-    id: session.id,
-    name: session.name,
-    cwd: session.cwd,
-    model: session.model,
-    pid: session.pid,
-    startedAt: session.startedAt,
-    lastSeen: session.lastSeen,
-    status: session.status,
-    online: session.online,
-    history: history ?? session.history,
-    liveMessage: liveMessage,
-    tools: session.tools,
-    contextUsage: session.contextUsage,
-    availableModels: session.availableModels,
-    slashCommands: session.slashCommands,
-    lastEvent: session.lastEvent,
-    health: session.health,
-    commands: session.commands,
-  );
+  return session.copyWith(history: history, liveMessage: liveMessage);
 }
 
 HubSnapshot _upsertCommandInSnapshot(HubSnapshot snapshot, HubCommand command) {
@@ -707,6 +752,32 @@ List<HubCommand> _upsertSessionCommand(
   }
   next.sort(_compareCommands);
   return next;
+}
+
+class HubHistoryPage {
+  HubHistoryPage({
+    required this.items,
+    required this.offset,
+    required this.total,
+    required this.hasMore,
+  });
+
+  final List<HubItem> items;
+  final int offset;
+  final int total;
+  final bool hasMore;
+
+  factory HubHistoryPage.fromJson(Map<String, dynamic> json) {
+    return HubHistoryPage(
+      items: (json['items'] as List? ?? [])
+          .whereType<Map>()
+          .map((item) => HubItem.fromJson(_stringKeyMap(item)))
+          .toList(),
+      offset: _intValue(json['offset']) ?? 0,
+      total: _intValue(json['total']) ?? 0,
+      hasMore: json['hasMore'] == true,
+    );
+  }
 }
 
 int _compareCommands(HubCommand a, HubCommand b) {

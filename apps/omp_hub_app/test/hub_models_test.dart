@@ -159,4 +159,48 @@ void main() {
     expect(snapshot.sessions[1].displayName, 'repo');
     expect(snapshot.sessions[2].displayName, 'empty-se');
   });
+
+  test('parses summary and paged detail metadata', () {
+    final summary = HubSnapshot.fromJson({
+      'server': {
+        'capabilities': {'summarySnapshot': true, 'sessionDetail': true},
+      },
+      'sessions': [
+        {
+          'id': 'thread-a',
+          'name': 'Thread A',
+          'model': 'gpt-test',
+          'status': 'idle',
+          'online': true,
+          'detailLoaded': false,
+        },
+      ],
+    });
+
+    expect(summary.server?.capabilities.summarySnapshot, isTrue);
+    expect(summary.server?.capabilities.sessionDetail, isTrue);
+    expect(summary.sessions.single.detailLoaded, isFalse);
+    expect(summary.sessions.single.history, isEmpty);
+
+    final detail = HubSession.fromJson({
+      'id': 'thread-a',
+      'name': 'Thread A',
+      'model': 'gpt-test',
+      'online': true,
+      'detailLoaded': true,
+      'history': [
+        {'id': 'm2', 'kind': 'assistant', 'timestamp': 2, 'text': 'new'},
+      ],
+      'historyPage': {'offset': 40, 'total': 120, 'hasMore': true},
+    });
+
+    expect(detail.detailLoaded, isTrue);
+    expect(detail.historyOffset, 40);
+    expect(detail.historyTotal, 120);
+    expect(detail.hasMoreHistory, isTrue);
+
+    final merged = detail.mergeSummary(summary.sessions.single);
+    expect(merged.history.single.id, 'm2');
+    expect(merged.detailLoaded, isTrue);
+  });
 }

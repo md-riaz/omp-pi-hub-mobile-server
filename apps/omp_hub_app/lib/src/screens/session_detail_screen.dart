@@ -26,6 +26,11 @@ class SessionDetailScreen extends StatefulWidget {
   final String connectionState;
   final bool connected;
   final VoidCallback? onReconnect;
+  final bool loadingInitial;
+  final bool loadingOlder;
+  final String? loadError;
+  final VoidCallback? onLoadOlder;
+  final VoidCallback? onRetryLoad;
 
   const SessionDetailScreen({
     super.key,
@@ -42,6 +47,11 @@ class SessionDetailScreen extends StatefulWidget {
     this.connectionState = 'Live',
     this.connected = true,
     this.onReconnect,
+    this.loadingInitial = false,
+    this.loadingOlder = false,
+    this.loadError,
+    this.onLoadOlder,
+    this.onRetryLoad,
   });
 
   @override
@@ -71,6 +81,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   void _checkIfAtBottom() {
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
+    if (pos.pixels < 120 &&
+        widget.session.hasMoreHistory &&
+        !widget.loadingOlder) {
+      widget.onLoadOlder?.call();
+    }
     final atBottom = pos.maxScrollExtent - pos.pixels < 100;
     if (atBottom != _isAtBottom) setState(() => _isAtBottom = atBottom);
   }
@@ -675,7 +690,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                 TodoPanel(todos: widget.session.todos),
                 // Events
                 Expanded(
-                  child: items.isEmpty
+                  child: widget.loadingInitial
+                      ? const Center(child: CircularProgressIndicator())
+                      : items.isEmpty
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(28),
@@ -695,18 +712,29 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                const Text(
-                                  'Start the conversation',
+                                Text(
+                                  widget.loadError == null
+                                      ? 'Start the conversation'
+                                      : 'Could not load thread',
                                   style: HubTheme.headingM,
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Send a prompt below. Replies will appear here.',
+                                  widget.loadError == null
+                                      ? 'Send a prompt below. Replies will appear here.'
+                                      : widget.loadError!,
                                   style: HubTheme.caption.copyWith(
                                     fontSize: 13,
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
+                                if (widget.loadError != null) ...[
+                                  const SizedBox(height: 12),
+                                  FilledButton(
+                                    onPressed: widget.onRetryLoad,
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -714,9 +742,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                       : ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          itemCount: items.length,
+                          itemCount: items.length + 1,
                           itemBuilder: (context, index) {
-                            final item = items[index];
+                            if (index == 0) {
+                              if (widget.loadingOlder) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                              if (widget.session.hasMoreHistory) {
+                                return TextButton(
+                                  onPressed: widget.onLoadOlder,
+                                  child: const Text('Load older messages'),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            }
+                            final item = items[index - 1];
                             final isStreaming =
                                 widget.session.liveMessage?.id ==
                                     item.event.id &&

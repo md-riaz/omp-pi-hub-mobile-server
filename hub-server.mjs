@@ -272,7 +272,7 @@ function browseEntry(dirPath, entry) {
 const sessions = new Map();
 const commandQueues = new Map();
 const commands = new Map();
-const watchers = new Set();
+const watchers = new Map();
 const MAX_WATCHERS = 25;
 const PENDING_COMMAND_STATUSES = new Set(["queued", "delivered"]);
 let eventSeq = 0;
@@ -334,6 +334,45 @@ function publicSession(session) {
   };
 }
 
+const DEFAULT_SESSION_HISTORY_LIMIT = 80;
+
+function publicSessionSummary(session) {
+  const health = deriveSessionHealth(session);
+  return {
+    id: session.id,
+    name: session.name,
+    cwd: session.cwd,
+    model: session.model,
+    pid: session.pid,
+    startedAt: session.startedAt,
+    lastSeen: session.lastSeen,
+    status: session.status,
+    online: session.online,
+    contextUsage: session.contextUsage,
+    health,
+    detailLoaded: false,
+  };
+}
+
+function historyWindow(session, options = {}) {
+  const limit = Math.max(1, Math.min(500, Number(options.limit || DEFAULT_SESSION_HISTORY_LIMIT)));
+  const fullHistory = Array.isArray(session.history) ? session.history : [];
+  const beforeValue = options.before === undefined || options.before === null || options.before === "" ? undefined : Number(options.before);
+  const endIndex = Number.isFinite(beforeValue) && beforeValue >= 0 ? Math.min(beforeValue, fullHistory.length) : fullHistory.length;
+  const startIndex = Math.max(0, endIndex - limit);
+  return { items: fullHistory.slice(startIndex, endIndex), offset: startIndex, limit, total: fullHistory.length, hasMore: startIndex > 0 };
+}
+
+function publicSessionDetail(session, options = {}) {
+  const page = historyWindow(session, options);
+  return {
+    ...publicSession(session),
+    history: page.items,
+    historyPage: { offset: page.offset, limit: page.limit, total: page.total, hasMore: page.hasMore },
+    detailLoaded: true,
+  };
+}
+
 function publicCommandsForSession(sessionId) {
   return Array.from(commands.values())
     .filter(command => command.sessionId === sessionId)
@@ -352,6 +391,8 @@ function serverCapabilities() {
     collaboration: true,
     browse: true,
     attachments: true,
+    summarySnapshot: true,
+    sessionDetail: true,
   };
 }
 
@@ -392,6 +433,30 @@ function snapshot() {
       .sort((a, b) => String(a.cwd).localeCompare(String(b.cwd)) || String(a.name || a.id).localeCompare(String(b.name || b.id)))
       .map(publicSession),
     commands: publicCommands(),
+  };
+}
+
+function summarySnapshot() {
+  expireCommands();
+  return {
+    server: {
+      pid: process.pid,
+      startedAt,
+      host: config.host,
+      port: Number(config.port),
+      time: nowIso(),
+      version: SERVER_VERSION,
+      schemaVersion: 2,
+      availableClis: detectAvailableClis(),
+      staleThresholdMs: Number(config.staleThresholdMs),
+      commandTimeoutMs: Number(config.commandTimeoutMs),
+      capabilities: serverCapabilities(),
+    },
+    sessions: Array.from(sessions.values())
+      .filter(isSessionVisible)
+      .sort((a, b) => String(a.cwd).localeCompare(String(b.cwd)) || String(a.name || a.id).localeCompare(String(b.name || b.id)))
+      .map(publicSessionSummary),
+    commands: [],
   };
 }
 
@@ -461,15 +526,22 @@ function isAuthorized(req, url) {
   return config.token && getToken(req) === config.token;
 }
 
+function streamPacketForWatcher(packet, options = {}) {
+  if (!options.summary) return packet;
+  const next = { ...packet };
+  if (next.snapshot) next.snapshot = summarySnapshot();
+  if (next.session) next.session = publicSessionSummary(next.session);
+  return next;
+}
+
 function broadcast(payload) {
   const packet = {
     seq: ++eventSeq,
     timestamp: Date.now(),
     ...payload,
   };
-  const text = `data: ${JSON.stringify(packet)}\n\n`;
-  for (const res of Array.from(watchers)) {
-    try { res.write(text); }
+  for (const [res, options] of Array.from(watchers.entries())) {
+    try { res.write(`data: ${JSON.stringify(streamPacketForWatcher(packet, options))}\n\n`); }
     catch { watchers.delete(res); }
   }
 }
@@ -1283,12 +1355,43 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/snapshot/summary") {
+      sendJson(req, res, 200, summarySnapshot());
+      return;
+    }
+
+    const sessionDetailMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+    if (req.method === "GET" && sessionDetailMatch) {
+      const sessionId = decodeURIComponent(sessionDetailMatch[1]);
+      const session = sessions.get(sessionId);
+      if (!session || !isSessionVisible(session)) {
+        sendJson(req, res, 404, { error: "session not found" });
+        return;
+      }
+      sendJson(req, res, 200, { ok: true, session: publicSessionDetail(session, { limit: url.searchParams.get("limit"), before: url.searchParams.get("before") }) });
+      return;
+    }
+
+    const sessionHistoryMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/history$/);
+    if (req.method === "GET" && sessionHistoryMatch) {
+      const sessionId = decodeURIComponent(sessionHistoryMatch[1]);
+      const session = sessions.get(sessionId);
+      if (!session || !isSessionVisible(session)) {
+        sendJson(req, res, 404, { error: "session not found" });
+        return;
+      }
+      const page = historyWindow(session, { limit: url.searchParams.get("limit"), before: url.searchParams.get("before") });
+      sendJson(req, res, 200, { ok: true, ...page });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/stream") {
       if (watchers.size >= MAX_WATCHERS) {
-        const oldest = watchers.values().next().value;
+        const oldest = watchers.keys().next().value;
         try { oldest.end(); } catch {}
         watchers.delete(oldest);
       }
+      const summary = url.searchParams.get("summary") === "1" || url.searchParams.get("summary") === "true";
       req.socket?.setNoDelay?.(true);
       res.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
@@ -1296,12 +1399,13 @@ const server = http.createServer(async (req, res) => {
         connection: "keep-alive",
         ...corsHeaders(req),
       });
-      res.write(`data: ${JSON.stringify({ seq: ++eventSeq, type: "snapshot", timestamp: Date.now(), snapshot: snapshot() })}\n\n`);
+      const initialSnapshot = summary ? summarySnapshot() : snapshot();
+      res.write(`data: ${JSON.stringify({ seq: ++eventSeq, type: "snapshot", timestamp: Date.now(), snapshot: initialSnapshot })}\n\n`);
       const heartbeat = setInterval(() => {
         try { res.write(`: ping ${Date.now()}\n\n`); }
         catch { clearInterval(heartbeat); watchers.delete(res); }
       }, 15000);
-      watchers.add(res);
+      watchers.set(res, { summary });
       req.on("close", () => {
         clearInterval(heartbeat);
         watchers.delete(res);
