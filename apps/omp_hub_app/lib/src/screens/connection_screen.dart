@@ -215,7 +215,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   }
 }
 
-class _InputField extends StatelessWidget {
+class _InputField extends StatefulWidget {
   final IconData icon;
   final String label;
   final TextEditingController controller;
@@ -231,16 +231,29 @@ class _InputField extends StatelessWidget {
   });
 
   @override
+  State<_InputField> createState() => _InputFieldState();
+}
+
+class _InputFieldState extends State<_InputField> {
+  late bool _obscureText;
+
+  @override
+  void initState() {
+    super.initState();
+    _obscureText = widget.obscure;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(icon, size: 13, color: HubTheme.text2),
+            Icon(widget.icon, size: 13, color: HubTheme.text2),
             const SizedBox(width: 6),
             Text(
-              label,
+              widget.label,
               style: TextStyle(
                 color: HubTheme.text2,
                 fontSize: 12,
@@ -251,18 +264,34 @@ class _InputField extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         TextField(
-          controller: controller,
-          obscureText: obscure,
+          controller: widget.controller,
+          obscureText: _obscureText,
           style: const TextStyle(
             color: HubTheme.text,
             fontSize: 14,
             fontFamily: 'monospace',
           ),
           decoration: InputDecoration(
-            hintText: placeholder,
+            hintText: widget.placeholder,
             hintStyle: const TextStyle(color: HubTheme.text3),
             filled: true,
             fillColor: HubTheme.card,
+            suffixIcon: widget.obscure
+                ? IconButton(
+                    tooltip: _obscureText ? 'Show token' : 'Hide token',
+                    icon: Icon(
+                      _obscureText
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      color: HubTheme.text2,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscureText = !_obscureText;
+                      });
+                    },
+                  )
+                : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
               borderSide: const BorderSide(color: HubTheme.softLine),
