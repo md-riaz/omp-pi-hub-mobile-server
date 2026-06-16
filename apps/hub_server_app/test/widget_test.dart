@@ -4,6 +4,6 @@ import 'package:omp_pi_hub_mobile_companion/main.dart';
 void main() {
   testWidgets('App renders', (WidgetTester tester) async {
     await tester.pumpWidget(const OmpPiHubMobileCompanionApp());
-    expect(find.text('OMP Pi Hub Mobile Companion'), findsOneWidget);
+    expect(find.text('Hub Server App'), findsOneWidget);
   });
 }

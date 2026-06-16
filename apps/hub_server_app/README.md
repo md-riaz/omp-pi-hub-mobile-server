@@ -1,11 +1,11 @@
-# OMP Pi Hub Mobile Companion
+# Hub Server App
 
 Flutter Android client for `omp-pi-hub-mobile-server` v2.1.0. It connects to the shared hub server and controls both `omp` and `pi` sessions.
 
 ## Run from source
 
 ```bash
-cd apps/omp_hub_app
+cd apps/hub_server_app
 flutter pub get
 flutter run
 ```

@@ -8,7 +8,7 @@ Use this alongside `AGENTS.md` when a new AI agent starts work on `omp-pi-hub-mo
 
 - `hub-core.ts` bridges a live `omp` or `pi` session to the hub through thin wrappers.
 - `hub-server.mjs` stores live state in memory and exposes HTTP/SSE API.
-- `apps/omp_hub_app` connects to the server, watches SSE, and sends commands.
+- `apps/hub_server_app` connects to the server, watches SSE, and sends commands.
 
 The product is for controlling many OMP and Pi agents from a phone. It is not a hosted SaaS. It is a trusted-network tool.
 
@@ -63,18 +63,18 @@ Change agent creation:
 1. `hub-server.mjs` `normalizeAgentCreationConfig()`.
 2. `validateAgentCreationRequest()`.
 3. `startAgentCreation()`.
-4. `apps/omp_hub_app/lib/src/widgets/new_session_sheet.dart`.
-5. `apps/omp_hub_app/lib/src/hub_client.dart` `AgentCreateRequest`.
+4. `apps/hub_server_app/lib/src/widgets/new_session_sheet.dart`.
+5. `apps/hub_server_app/lib/src/hub_client.dart` `AgentCreateRequest`.
 
 Change mobile session list/navigation:
 
-1. `apps/omp_hub_app/lib/main.dart` selected/detail session state.
-2. `apps/omp_hub_app/lib/src/screens/mission_control_screen.dart` narrow vs wide layout.
+1. `apps/hub_server_app/lib/main.dart` selected/detail session state.
+2. `apps/hub_server_app/lib/src/screens/mission_control_screen.dart` narrow vs wide layout.
 
 Change detail transcript UI:
 
-1. `apps/omp_hub_app/lib/src/screens/session_detail_screen.dart`.
-2. `HubItem` model in `apps/omp_hub_app/lib/src/hub_models.dart`.
+1. `apps/hub_server_app/lib/src/screens/session_detail_screen.dart`.
+2. `HubItem` model in `apps/hub_server_app/lib/src/hub_models.dart`.
 
 ## Validation Checklist Before Commit
 
@@ -89,7 +89,7 @@ node --check pi-hub-server.mjs
 Flutter:
 
 ```bash
-cd apps/omp_hub_app
+cd apps/hub_server_app
 flutter analyze
 flutter test
 flutter build apk --release

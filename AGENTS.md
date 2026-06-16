@@ -10,7 +10,7 @@ It has three runtime pieces:
 
 1. `hub-core.ts` plus wrappers `omp-hub.ts` and `pi-hub.ts`.
 2. `hub-server.mjs`, with `omp-hub-server.mjs` and `pi-hub-server.mjs` as compatibility shims.
-3. `apps/omp_hub_app`, the OMP Pi Hub Mobile Companion Flutter Android app.
+3. `apps/hub_server_app`, the Hub Server App Flutter Android app.
 
 Primary user goal: monitor and control many OMP and Pi sessions from Android without RDP, with one URL, one token, and one combined session list.
 
@@ -67,11 +67,11 @@ Server:
 
 Flutter Android app:
 
-- `apps/omp_hub_app/lib/main.dart` - connection state, SSE snapshot, new-session flow.
-- `apps/omp_hub_app/lib/src/hub_client.dart` - HTTP + SSE client and agent-create request serialization.
-- `apps/omp_hub_app/lib/src/hub_models.dart` - API models including `HubServerInfo.availableClis`.
-- `apps/omp_hub_app/lib/src/widgets/new_session_sheet.dart` - conditional CLI picker and model/path/prompt inputs.
-- `apps/omp_hub_app/android/app/src/main/AndroidManifest.xml` - keep `android:usesCleartextTraffic="true"` while hub uses HTTP.
+- `apps/hub_server_app/lib/main.dart` - connection state, SSE snapshot, new-session flow.
+- `apps/hub_server_app/lib/src/hub_client.dart` - HTTP + SSE client and agent-create request serialization.
+- `apps/hub_server_app/lib/src/hub_models.dart` - API models including `HubServerInfo.availableClis`.
+- `apps/hub_server_app/lib/src/widgets/new_session_sheet.dart` - conditional CLI picker and model/path/prompt inputs.
+- `apps/hub_server_app/android/app/src/main/AndroidManifest.xml` - keep `android:usesCleartextTraffic="true"` while hub uses HTTP.
 
 ## API Summary
 
@@ -118,7 +118,7 @@ node --check pi-hub-server.mjs
 Flutter:
 
 ```bash
-cd apps/omp_hub_app
+cd apps/hub_server_app
 flutter analyze
 flutter test
 flutter build apk --release

@@ -23,12 +23,12 @@
     "pi-hub-server.mjs",
     "README.md",
     "LICENSE",
-    "apps/omp_hub_app/lib/**",
-    "apps/omp_hub_app/pubspec.yaml",
-    "apps/omp_hub_app/pubspec.lock",
-    "apps/omp_hub_app/analysis_options.yaml",
-    "apps/omp_hub_app/test/**",
-    "apps/omp_hub_app/android/**"
+    "apps/hub_server_app/lib/**",
+    "apps/hub_server_app/pubspec.yaml",
+    "apps/hub_server_app/pubspec.lock",
+    "apps/hub_server_app/analysis_options.yaml",
+    "apps/hub_server_app/test/**",
+    "apps/hub_server_app/android/**"
   ],
   "omp": {
     "extensions": [

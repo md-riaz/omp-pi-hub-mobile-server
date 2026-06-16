@@ -23,7 +23,7 @@ class OmpPiHubMobileCompanionApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OMP Pi Hub Mobile Companion',
+      title: 'Hub Server App',
       debugShowCheckedModeBanner: false,
       theme: HubTheme.themeData,
       home: const HubHomePage(),
@@ -501,9 +501,6 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
       if (summary == null) continue;
       _sessionDetailCache[entry.key] = entry.value.mergeSummary(summary);
     }
-    if (_detailSessionId != null && !summaries.containsKey(_detailSessionId)) {
-      _detailSessionId = null;
-    }
     return _snapshotWithPendingMessages(remembered);
   }
 
@@ -523,8 +520,16 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
   }
 
   void _openDetail(String sessionId) {
-    setState(() => _detailSessionId = sessionId);
-    unawaited(_loadSessionDetail(sessionId));
+    final summary = _summarySession(sessionId);
+    setState(() {
+      _detailSessionId = sessionId;
+      if (summary?.detailLoaded == true) {
+        _sessionDetailCache[sessionId] = summary!;
+      }
+    });
+    if (summary?.detailLoaded != true) {
+      unawaited(_loadSessionDetail(sessionId));
+    }
   }
 
   Future<void> _loadSessionDetail(
@@ -547,7 +552,10 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
             : detail.mergeSummary(summary);
       });
     } catch (error) {
-      if (mounted) {
+      final summary = _summarySession(sessionId);
+      if (mounted && summary?.detailLoaded == true) {
+        setState(() => _sessionDetailCache[sessionId] = summary!);
+      } else if (mounted) {
         setState(() => _sessionDetailErrors[sessionId] = error.toString());
       }
     } finally {

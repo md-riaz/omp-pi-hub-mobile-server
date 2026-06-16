@@ -29,7 +29,7 @@ omp sessions                  pi sessions
        token-protected JSON + SSE
                   |
                   v
-        apps/omp_hub_app (OMP Pi Hub Mobile Companion)
+        apps/hub_server_app (Hub Server App)
 ```
 
 Compatibility shims remain:
@@ -115,7 +115,7 @@ Run `/hub info` to see detected LAN IPs. Keep the hub on trusted networks and al
 Run in development:
 
 ```bash
-cd apps/omp_hub_app
+cd apps/hub_server_app
 flutter pub get
 flutter run
 ```
@@ -123,14 +123,14 @@ flutter run
 Build an APK:
 
 ```bash
-cd apps/omp_hub_app
+cd apps/hub_server_app
 flutter build apk --release
 ```
 
 APK output:
 
 ```text
-apps/omp_hub_app/build/app/outputs/flutter-apk/app-release.apk
+apps/hub_server_app/build/app/outputs/flutter-apk/app-release.apk
 ```
 
 ## Configuration
@@ -241,7 +241,7 @@ Protect `~/.hub-dashboard/server/config.json`; it contains the bearer token.
 node --check hub-server.mjs
 node --check omp-hub-server.mjs
 node --check pi-hub-server.mjs
-cd apps/omp_hub_app
+cd apps/hub_server_app
 flutter analyze
 flutter test
 ```

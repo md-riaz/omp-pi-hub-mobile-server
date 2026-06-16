@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- No FCM service needed: optional external push is hub-side ntfy/webhook style and disabled by default. -->
     <application
-        android:label="OMP Pi Hub Mobile Companion"
+        android:label="Hub Server App"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

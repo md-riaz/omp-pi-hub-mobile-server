@@ -149,7 +149,7 @@ class _SessionListScreenState extends State<SessionListScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'OMP Pi Hub Mobile Companion',
+                              'Hub Server App',
                               style: TextStyle(
                                 color: HubTheme.text,
                                 fontSize: 18,

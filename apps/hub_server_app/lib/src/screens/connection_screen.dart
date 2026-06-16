@@ -73,10 +73,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'OMP Pi Hub Mobile Companion',
-                style: HubTheme.headingL,
-              ),
+              const Text('Hub Server App', style: HubTheme.headingL),
               const SizedBox(height: 8),
               Text(
                 'Connect to your hub server and continue conversations from your phone.',
