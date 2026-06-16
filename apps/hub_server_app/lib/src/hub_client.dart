@@ -126,24 +126,20 @@ class HubClient {
   }
 
   Future<HubSnapshot> fetchSnapshot() async {
-    return _fetchSnapshotPath(
-      '/api/snapshot/summary',
-      fallbackPath: '/api/snapshot',
-    );
+    return _fetchSnapshotPath('/api/snapshot/summary');
   }
 
-  Future<HubSnapshot> _fetchSnapshotPath(
-    String path, {
-    String? fallbackPath,
-  }) async {
+  Future<HubSnapshot> _fetchSnapshotPath(String path) async {
     final client = _newHttpClient();
     try {
       final request = await client.getUrl(_uri(path));
       _authorize(request);
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
-      if (response.statusCode == 404 && fallbackPath != null) {
-        return _fetchSnapshotPath(fallbackPath);
+      if (response.statusCode == 404) {
+        throw Exception(
+          'Hub server is not updated: $path returned 404. Update and restart the hub server.',
+        );
       }
       if (response.statusCode != 200) {
         throw Exception('${response.statusCode}: $body');

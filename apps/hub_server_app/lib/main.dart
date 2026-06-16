@@ -552,10 +552,7 @@ class _HubHomePageState extends State<HubHomePage> with WidgetsBindingObserver {
             : detail.mergeSummary(summary);
       });
     } catch (error) {
-      final summary = _summarySession(sessionId);
-      if (mounted && summary?.detailLoaded == true) {
-        setState(() => _sessionDetailCache[sessionId] = summary!);
-      } else if (mounted) {
+      if (mounted) {
         setState(() => _sessionDetailErrors[sessionId] = error.toString());
       }
     } finally {
