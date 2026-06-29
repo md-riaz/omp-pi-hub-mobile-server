@@ -1,5 +1,5 @@
 import { homedir, networkInterfaces } from "os";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, openSync, closeSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawn, type ChildProcess } from "child_process";
@@ -87,6 +87,43 @@ function manualServerStopPath(): string {
 	return join(hubDir(), "server.manual-stop");
 }
 
+function serverStartupLockPath(): string {
+	return join(hubDir(), "server.starting.lock");
+}
+
+function tryAcquireStartupLock(staleMs = 30_000): boolean {
+	mkdirSync(hubDir(), { recursive: true });
+	const lock = serverStartupLockPath();
+	try {
+		const fd = openSync(lock, "wx");
+		writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
+		closeSync(fd);
+		return true;
+	} catch {}
+	try {
+		const raw = readFileSync(lock, "utf8");
+		const data = JSON.parse(raw) as { pid?: unknown; startedAt?: unknown };
+		const pid = typeof data.pid === "number" ? data.pid : Number(data.pid);
+		const startedAt = typeof data.startedAt === "number" ? data.startedAt : Number(data.startedAt);
+		const stale = !Number.isFinite(startedAt) || Date.now() - startedAt > staleMs;
+		const ownerAlive = Number.isFinite(pid) && isProcessRunning(pid);
+		if (!stale && ownerAlive) return false;
+	} catch {}
+	try { unlinkSync(lock); } catch {}
+	try {
+		const fd = openSync(lock, "wx");
+		writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
+		closeSync(fd);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function releaseStartupLock(): void {
+	try { unlinkSync(serverStartupLockPath()); } catch {}
+}
+
 function isServerManuallyStopped(): boolean {
 	return existsSync(manualServerStopPath());
 }
@@ -143,7 +180,11 @@ function isProcessRunning(pid: number): boolean {
 
 function readPid(): number | null {
 	try {
-		const pid = Number(readFileSync(pidPath(), "utf8").trim());
+		const raw = readFileSync(pidPath(), "utf8").trim();
+		if (!raw) return null;
+		if (/^\d+$/.test(raw)) return Number(raw);
+		const data = JSON.parse(raw) as { pid?: unknown };
+		const pid = typeof data.pid === "number" ? data.pid : Number(data.pid);
 		return Number.isFinite(pid) ? pid : null;
 	} catch {
 		return null;
@@ -238,24 +279,40 @@ async function ensureServer(config: HubConfig, params: HubParams, waitMs = 7000)
 		);
 	}
 
+	const lockWaitMs = Math.max(waitMs, 12_000);
+	if (!tryAcquireStartupLock(Math.max(waitMs * 2, 30_000))) {
+		console.warn(`[${params.clientName}] startup lock busy; waiting for existing hub launch`);
+		await waitForServer(config, params, lockWaitMs);
+		return;
+	}
+
 	spawningServer = true;
 	lastSpawnAtMs = Date.now();
 	const child = spawnServer(config);
 	child.unref();
+	console.info(`[${params.clientName}] spawning hub server via ${process.execPath}`);
 	try {
 		await waitForServer(config, params, waitMs);
 		consecutiveSpawnFailures = 0;
+		const startedPid = readPid();
+		console.info(`[${params.clientName}] hub server reachable${startedPid ? ` (pid ${startedPid})` : ""}`);
 	} catch (err) {
-		// Server started but took longer than the timeout — process is alive, just slow.
-		// Don't count this as a spawn failure; background monitor will pick it up.
 		const startedPid = readPid();
 		if (startedPid && isProcessRunning(startedPid)) {
 			consecutiveSpawnFailures = 0;
+			console.warn(
+				`[${params.clientName}] hub startup exceeded timeout but process ${startedPid} is alive; treating as slow start`
+			);
 		} else {
 			consecutiveSpawnFailures++;
+			console.error(
+				`[${params.clientName}] hub startup failed (attempt ${consecutiveSpawnFailures}/${MAX_SPAWN_FAILURES})`,
+				err
+			);
 		}
 		throw err;
 	} finally {
+		releaseStartupLock();
 		spawningServer = false;
 	}
 }

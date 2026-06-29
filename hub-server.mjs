@@ -1616,6 +1616,30 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+function readPidFile() {
+  try {
+    const raw = fs.readFileSync(PID_PATH, "utf8").trim();
+    if (!raw) return null;
+    if (/^\d+$/.test(raw)) return { pid: Number(raw), startedAt: null };
+    const data = JSON.parse(raw);
+    const pid = typeof data?.pid === "number" ? data.pid : Number(data?.pid);
+    const startedAt = typeof data?.startedAt === "number" ? data.startedAt : Number(data?.startedAt);
+    if (!Number.isFinite(pid)) return null;
+    return { pid, startedAt: Number.isFinite(startedAt) ? startedAt : null };
+  } catch {
+    return null;
+  }
+}
+
+function removePidFileIfOwned() {
+  const record = readPidFile();
+  if (record && record.pid !== process.pid) return;
+  try { fs.unlinkSync(PID_PATH); } catch {}
+}
+
+function pidRecord() {
+  return JSON.stringify({ pid: process.pid, startedAt: Date.now() });
+}
 server.on("error", error => {
   console.error("Hub Dashboard server error:", error);
   process.exit(1);
@@ -1624,7 +1648,7 @@ server.on("error", error => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 process.on("exit", () => {
-  try { fs.unlinkSync(PID_PATH); } catch {}
+  removePidFileIfOwned();
 });
 
 function shutdown() {
@@ -1632,14 +1656,14 @@ function shutdown() {
     try { res.end(); } catch {}
   }
   watchers.clear();
-  try { fs.unlinkSync(PID_PATH); } catch {}
+  removePidFileIfOwned();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 1000).unref();
 }
 
 server.listen(Number(config.port), config.host, () => {
   fs.mkdirSync(HUB_DIR, { recursive: true });
-  fs.writeFileSync(PID_PATH, String(process.pid));
+  fs.writeFileSync(PID_PATH, pidRecord());
   console.log(`Hub Dashboard server listening on ${config.host}:${config.port}`);
   const addresses = localAddresses().map(ip => `http://${ip}:${config.port}`).join(", ");
   if (addresses) console.log(`LAN URLs: ${addresses}`);
